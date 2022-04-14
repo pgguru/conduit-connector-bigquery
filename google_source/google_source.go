@@ -15,7 +15,6 @@ import (
 	"cloud.google.com/go/bigquery"
 	bqStorage "cloud.google.com/go/bigquery/storage/apiv1"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/golang/protobuf/ptypes"
 	gax "github.com/googleapis/gax-go/v2"
 	goavro "github.com/linkedin/goavro/v2"
 	"google.golang.org/api/iterator"
@@ -33,8 +32,6 @@ var rpcOpts = gax.WithGRPCOptions(
 
 // Command-line flags.
 var (
-	// projectID = flag.String("project_id", "conduit-connector",
-	// 	"Cloud Project ID, used for session creation.")
 	snapshotMillis = flag.Int64("snapshot_millis", 0,
 		"Snapshot time to use for reads, represented in epoch milliseconds format.  Default behavior reads current data.")
 )
@@ -60,17 +57,19 @@ func (s *Source) ReadDataFromEndpoint(bqReadClient *bqStorage.BigQueryReadClient
 		MaxStreamCount: 1,
 	}
 
-	// Set a snapshot time if it's been specified.
-	if *snapshotMillis > 0 {
-		ts, err := ptypes.TimestampProto(time.Unix(0, *snapshotMillis*1000))
-		if err != nil {
-			sdk.Logger(s.Ctx).Info().Str("snapsortmilis", fmt.Sprint(*snapshotMillis)).Msg("Invalid snapshot millis (%d): %v")
-			return err
-		}
-		createReadSessionRequest.ReadSession.TableModifiers = &bqStoragepb.ReadSession_TableModifiers{
-			SnapshotTime: ts,
-		}
-	}
+	//TODO: discuss if this is required
+
+	// // Set a snapshot time if it's been specified.
+	// if *snapshotMillis > 0 {
+	// 	ts, err := ptypes.TimestampProto(time.Unix(0, *snapshotMillis*1000))
+	// 	if err != nil {
+	// 		sdk.Logger(s.Ctx).Info().Str("snapsortmilis", fmt.Sprint(*snapshotMillis)).Msg("Invalid snapshot millis (%d): %v")
+	// 		return err
+	// 	}
+	// 	createReadSessionRequest.ReadSession.TableModifiers = &bqStoragepb.ReadSession_TableModifiers{
+	// 		SnapshotTime: ts,
+	// 	}
+	// }
 
 	// Create the session from the request.
 	s.Session, err = bqReadClient.CreateReadSession(s.Ctx, createReadSessionRequest, rpcOpts)
@@ -205,7 +204,6 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Avro
 					Payload:   sdk.RawData(byteSlice)}
 
 				responseCh <- record
-				sdk.Logger(ctx).Info().Msg("Will show data")
 				undecoded = remainingBytes
 			}
 		}

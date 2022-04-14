@@ -1,20 +1,22 @@
 package googlebigquery
 
 import (
+	"errors"
 	"fmt"
 	"log"
 )
 
 const (
-	// ConfigKeyAWSAccessKeyID is the config name for AWS access secret key
+	// ConfigProjectID is the config projectID
 	ConfigProjectID = "srcProjectID"
 
-	// ConfigKeyAWSSecretAccessKey is the config name for AWS secret access key
-	ConfigDatasetID = "srcDatasetID" // nolint:gosec // false positive
+	// ConfigDatasetID is the dataset ID
+	ConfigDatasetID = "srcDatasetID"
 
-	// ConfigKeyAWSRegion is the config name for AWS region
+	// ConfigTableID is the tableID
 	ConfigTableID = "srcTableID"
 
+	// ConfigServiceAccount path to service account key
 	ConfigServiceAccount = "serviceAccount"
 )
 
@@ -36,6 +38,18 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 	if err != nil {
 		log.Println("Empty config found:", err)
 		return SourceConfig{}, err
+	}
+
+	if _, ok := cfg[ConfigServiceAccount]; !ok {
+		return SourceConfig{}, errors.New("service account can't be blank")
+	}
+
+	if _, ok := cfg[ConfigProjectID]; !ok {
+		return SourceConfig{}, errors.New("project ID can't be blank")
+	}
+
+	if _, ok := cfg[ConfigDatasetID]; !ok {
+		return SourceConfig{}, errors.New("dataset ID can't be blank")
 	}
 
 	config := Config{

@@ -16,7 +16,7 @@ func Specification() sdk.Specification {
 			ConfigServiceAccount: {
 				Default:     "",
 				Required:    true,
-				Description: "Service account with data pulling access.",
+				Description: "Path to service account key with data pulling access.",
 			},
 			ConfigProjectID: {
 				Default:     "",
