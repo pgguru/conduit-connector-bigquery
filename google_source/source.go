@@ -5,12 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
+	"time"
 
-	"cloud.google.com/go/bigquery"
 	bqStorage "cloud.google.com/go/bigquery/storage/apiv1"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
-	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 	bqStoragepb "google.golang.org/genproto/googleapis/cloud/bigquery/storage/v1"
 )
 
@@ -36,7 +37,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	sdk.Logger(ctx).Info().Msg("Configuring a Source Connector...")
 	config, err := googlebigquery.ParseSourceConfig(cfg)
 	if err != nil {
-
+		sdk.Logger(ctx).Error().Msg("blank config provided")
 		return err
 	}
 
@@ -48,14 +49,46 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 
 	flag.Parse()
 
-	if s.Config.Config.ConfigTableID == "" {
-		s.Tables, err = listTables(s.Config.Config.ConfigProjectID, s.Config.Config.ConfigDatasetID)
-		if err != nil {
-			log.Println("we found an error: ", err)
-		}
+	// ctx = context.Background()
+	s.Ctx = ctx
+	bqReadClient, err := bqStorage.NewBigQueryReadClient(ctx, option.WithCredentialsFile(s.Config.Config.ConfigServiceAccount))
+	if err != nil {
+		sdk.Logger(s.Ctx).Info().Str("err", err.Error()).Msg("NewBigQueryStorageClient: ")
+		return err
+	}
+	// defer bqReadClient.Close()
+	s.BQReadClient = bqReadClient
+
+	projectID := &s.Config.Config.ConfigProjectID
+
+	// Verify we've been provided a parent project which will contain the read session.  The
+	// session may exist in a different project than the table being read.
+	if *projectID == "" {
+		log.Fatalf("No parent project ID specified, please supply using the --project_id flag.")
 	}
 
-	s.ReadDataFromEndpoint()
+	if s.Config.Config.ConfigTableID == "" {
+		s.Tables, err = s.listTables(s.Config.Config.ConfigProjectID, s.Config.Config.ConfigDatasetID)
+		if err != nil {
+			sdk.Logger(ctx).Info().Str("err", err.Error()).Msg("Stated read function")
+			log.Println("we found an error: ", err)
+		}
+	} else {
+		s.Tables = strings.SplitAfter(s.Config.Config.ConfigTableID, ",")
+	}
+
+	s.SDKResponse = make(chan sdk.Record, 100)
+	// TablesCount := len(s.Tables)
+	// var lastTable bool
+	for _, tableID := range s.Tables {
+		// 	if count >= (TablesCount - 1) {
+		// 		lastTable = true
+		// 	}
+		fmt.Println("Get table: ", tableID)
+		err = s.ReadDataFromEndpoint(bqReadClient, tableID)
+	}
+
+	// close(s.SDKResponse)
 	// fmt.Println("end of function: open")
 	log.Println("end of function: open")
 	return nil
@@ -63,15 +96,27 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 
-	log.Println("Start of function: read")
+	sdk.Logger(ctx).Debug().Msg("Stated read function")
 
 	var response sdk.Record
 	var ok bool
+	time.Sleep(2 * time.Second)
+
+	if len(s.SDKResponse) <= 0 {
+		// Sleep so that we wait for first entry to get inserted into response in case of any delay from endpoint.
+		time.Sleep(2 * time.Second)
+		if len(s.SDKResponse) <= 0 {
+			sdk.Logger(ctx).Debug().Msg("no more values in repsonse. closing the channel now.")
+			close(s.SDKResponse)
+			<-ctx.Done()
+			return sdk.Record{}, ctx.Err()
+		}
+	}
 	if response, ok = <-s.SDKResponse; !ok {
+		sdk.Logger(ctx).Debug().Msg("no more values in repsonse. closing the channel now.")
+		close(s.SDKResponse)
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
-
-	log.Println("record found: ", response)
 
 	return response, nil
 
@@ -85,32 +130,4 @@ func (s *Source) Teardown(ctx context.Context) error {
 
 	s.BQReadClient.Close()
 	return nil
-}
-
-// listTables demonstrates iterating through the collection of tables in a given dataset.
-func listTables(projectID, datasetID string) ([]string, error) {
-	// projectID := "my-project-id"
-	// datasetID := "mydataset"
-	ctx := context.Background()
-	tables := []string{}
-
-	client, err := bigquery.NewClient(ctx, projectID)
-	if err != nil {
-		return []string{}, fmt.Errorf("bigquery.NewClient: %v", err)
-	}
-	defer client.Close()
-
-	ts := client.Dataset(datasetID).Tables(ctx)
-	for {
-		t, err := ts.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return []string{}, err
-		}
-		tables = append(tables, t.TableID)
-		// fmt.Printf("Table: %q\n", t.TableID)
-	}
-	return tables, nil
 }

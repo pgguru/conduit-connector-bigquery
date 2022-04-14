@@ -4,59 +4,56 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
-	"sync"
+	"sort"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	bqStorage "cloud.google.com/go/bigquery/storage/apiv1"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/golang/protobuf/ptypes"
+	gax "github.com/googleapis/gax-go/v2"
 	goavro "github.com/linkedin/goavro/v2"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	bqStoragepb "google.golang.org/genproto/googleapis/cloud/bigquery/storage/v1"
+	"google.golang.org/grpc"
 )
 
-// ReadDataFromEndpoint ...
-func (s *Source) ReadDataFromEndpoint() {
-	ctx := context.Background()
-	s.Ctx = ctx
-	bqReadClient, err := bqStorage.NewBigQueryReadClient(ctx, option.WithCredentialsFile(s.Config.Config.ConfigServiceAccount))
-	if err != nil {
-		log.Fatalf("NewBigQueryStorageClient: %v", err)
-	}
-	// defer bqReadClient.Close()
-	s.BQReadClient = bqReadClient
+// rpcOpts is used to configure the underlying gRPC client to accept large
+// messages.  The BigQuery Storage API may send message blocks up to 128MB
+// in size.
+var rpcOpts = gax.WithGRPCOptions(
+	grpc.MaxCallRecvMsgSize(1024 * 1024 * 129),
+)
 
-	projectID := &s.Config.Config.ConfigProjectID
+// Command-line flags.
+var (
+	// projectID = flag.String("project_id", "conduit-connector",
+	// 	"Cloud Project ID, used for session creation.")
+	snapshotMillis = flag.Int64("snapshot_millis", 0,
+		"Snapshot time to use for reads, represented in epoch milliseconds format.  Default behavior reads current data.")
+)
 
-	// Verify we've been provided a parent project which will contain the read session.  The
-	// session may exist in a different project than the table being read.
-	if *projectID == "" {
-		log.Fatalf("No parent project ID specified, please supply using the --project_id flag.")
-	}
+// ReadDataFromEndpoint read data from google bigquery
+func (s *Source) ReadDataFromEndpoint(bqReadClient *bqStorage.BigQueryReadClient, tableID string) (err error) {
 
 	readTable := fmt.Sprintf("projects/%s/datasets/%s/tables/%s",
 		s.Config.Config.ConfigProjectID,
 		s.Config.Config.ConfigDatasetID,
-		s.Config.Config.ConfigTableID,
+		tableID,
 	)
 
-	// We limit the output columns to a subset of those allowed in the table,
-	// and set a simple filter to only report names from the state of
-	// Washington (WA).
-	tableReadOptions := &bqStoragepb.ReadSession_TableReadOptions{
-		SelectedFields: []string{"Name", "phoneNo", "id"},
-		// RowRestriction: `state = "WA"`,
-	}
+	tableReadOptions := &bqStoragepb.ReadSession_TableReadOptions{}
 
 	createReadSessionRequest := &bqStoragepb.CreateReadSessionRequest{
-		Parent: fmt.Sprintf("projects/%s", *projectID),
+		Parent: fmt.Sprintf("projects/%s", s.Config.Config.ConfigProjectID),
 		ReadSession: &bqStoragepb.ReadSession{
-			Table: readTable,
-			// This API can also deliver data serialized in Apache Arrow format.
-			// This example leverages Apache Avro.
+			Table:       readTable,
 			DataFormat:  bqStoragepb.DataFormat_AVRO,
 			ReadOptions: tableReadOptions,
 		},
@@ -67,7 +64,8 @@ func (s *Source) ReadDataFromEndpoint() {
 	if *snapshotMillis > 0 {
 		ts, err := ptypes.TimestampProto(time.Unix(0, *snapshotMillis*1000))
 		if err != nil {
-			log.Fatalf("Invalid snapshot millis (%d): %v", *snapshotMillis, err)
+			sdk.Logger(s.Ctx).Info().Str("snapsortmilis", fmt.Sprint(*snapshotMillis)).Msg("Invalid snapshot millis (%d): %v")
+			return err
 		}
 		createReadSessionRequest.ReadSession.TableModifiers = &bqStoragepb.ReadSession_TableModifiers{
 			SnapshotTime: ts,
@@ -77,106 +75,42 @@ func (s *Source) ReadDataFromEndpoint() {
 	// Create the session from the request.
 	s.Session, err = bqReadClient.CreateReadSession(s.Ctx, createReadSessionRequest, rpcOpts)
 	if err != nil {
-		log.Fatalf("CreateReadSession: %v", err)
+		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error found while creating session: ")
+		return err
 	}
-	fmt.Printf("Read session: %s\n", s.Session.GetName())
 
 	if len(s.Session.GetStreams()) == 0 {
-		log.Fatalf("no streams in session.  if this was a small query result, consider writing to output to a named table.")
+		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("no streams in session.  if this was a small query result, consider writing to output to a named table.")
+		return errors.New("no session found")
 	}
 
-	// // We'll use only a single stream for reading data from the table.  Because
-	// // of dynamic sharding, this will yield all the rows in the table. However,
-	// // if you wanted to fan out multiple readers you could do so by having a
-	// // increasing the MaxStreamCount.
 	readStream := s.Session.GetStreams()[0].Name
-	// defer s.BQReadClient.Close()
 	s.Ch = make(chan *bqStoragepb.AvroRows, 1)
-	// ch := make(chan *bqStoragepb.AvroRows)
-	// responseCh := make(chan *[]string)
 
-	// // Use a waitgroup to coordinate the reading and decoding goroutines.
-	// var wg sync.WaitGroup
-
-	// // Start the reading in one goroutine.
-	// wg.Add(1)
-	go func() {
-		// defer wg.Done()
+	go func() (err error) {
+		defer close(s.Ch)
 		if err := processStream(s.Ctx, s.BQReadClient, readStream, s.Ch); err != nil {
-			log.Fatalf("processStream failure: %v", err)
+			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("processStream failure:")
+			return errors.New("no session found")
 		}
-		close(s.Ch)
+		return nil
 	}()
 
-	s.SDKResponse = make(chan sdk.Record, 100)
-	// Use a waitgroup to coordinate the reading and decoding goroutines.
-	// wg.Add(1)
-	go func() {
-		// defer wg.Done()
-		err := processAvro(s.Ctx, s.Session.GetAvroSchema().GetSchema(), s.Ch, s.SDKResponse)
+	go func() (err error) {
+		err = processAvro(s.Ctx, s.Session.GetAvroSchema().GetSchema(), s.Ch, s.SDKResponse)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			log.Printf("Error processing avro: %v", err)
+			sdk.Logger(s.Ctx).Info().Str("tableID", tableID).Msg("Done processing table")
+			return nil
 		} else if err != nil {
-			log.Fatal("Unknown error: ", err)
+			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error found")
+			return err
 		}
-		close(s.SDKResponse)
+
+		return nil
 	}()
+	return err
 
-	// // Wait until both the reading and decoding goroutines complete.
-	// wg.Wait()
-	fmt.Println("Open func ended")
 }
-
-func (s *Source) ShowData() (errGo error) {
-
-	var wg sync.WaitGroup
-	s.ResponseCh = make(chan *[]string)
-	// Use a waitgroup to coordinate the reading and decoding goroutines.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := processAvro(s.Ctx, s.Session.GetAvroSchema().GetSchema(), s.Ch, s.SDKResponse)
-		if err != nil && err == sdk.ErrBackoffRetry {
-			log.Fatalf("Error processing avro: %v", err)
-			s.ErrResponseCh <- err
-		}
-		close(s.ResponseCh)
-	}()
-
-	// Wait until both the reading and decoding goroutines complete.
-	wg.Wait()
-	return errGo
-}
-
-// func (s *Source) ShowData() (errGo error) {
-// 	// go func() {
-
-// 	for {
-// 		select {
-// 		case <-s.Ctx.Done():
-// 			// Context was cancelled.  Stop.
-// 			return
-// 		case rows, ok := <-s.ResponseCh:
-// 			if !ok {
-// 				errGo = sdk.ErrBackoffRetry
-// 				s.ErrResponseCh <- sdk.ErrBackoffRetry
-// 				return
-// 				// Channel closed, no further avro messages.  Stop.
-// 				// return
-// 			}
-// 			result := []string{}
-// 			var row []string
-// 			row = *rows
-// 			result = append(result, row...)
-// 			fmt.Println("hereeee...")
-// 			s.ResultCh <- &result
-// 			// fmt.Println(result)
-// 		}
-// 	}
-// 	// }()
-// 	// fmt.Println("Error found: ", errGo)
-// 	// return errGo
-// }
 
 // processStream reads rows from a single storage Stream, and sends the Avro
 // data blocks to a channel. This function will retry on transient stream
@@ -191,7 +125,7 @@ func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st
 
 	for {
 		retries := 0
-		// Send the initiating request to start streaming row blocks.
+
 		rowStream, err := client.ReadRows(ctx, &bqStoragepb.ReadRowsRequest{
 			ReadStream: st,
 			Offset:     offset,
@@ -205,23 +139,18 @@ func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st
 			r, err := rowStream.Recv()
 			if err == io.EOF {
 				return nil
-				// continue
 			}
 			if err != nil {
 				retries++
 				if retries >= retryLimit {
 					return fmt.Errorf("processStream retries exhausted: %v", err)
 				}
-				// break the inner loop, and try to recover by starting a new streaming
-				// ReadRows call at the last known good offset.
 				break
 			}
 
 			rc := r.GetRowCount()
 			if rc > 0 {
-				// Bookmark our progress in case of retries and send the rowblock on the channel.
 				offset = offset + rc
-				// We're making progress, reset retries.
 				retries = 0
 				ch <- r.GetAvroRows()
 
@@ -235,9 +164,6 @@ func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st
 // continue to run until the channel is closed or the provided context is
 // cancelled.
 func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.AvroRows, responseCh chan<- sdk.Record) error {
-	// Establish a decoder that can process blocks of messages using the
-	// reference schema. All blocks share the same schema, so the decoder
-	// can be long-lived.
 	codec, err := goavro.NewCodec(schema)
 	if err != nil {
 		return fmt.Errorf("couldn't create codec: %v", err)
@@ -246,13 +172,10 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Avro
 	for {
 		select {
 		case <-ctx.Done():
-			// Context was cancelled.  Stop.
 			return nil
 		case rows, ok := <-ch:
 			if !ok {
-				// Channel closed, no further avro messages.  Stop.
-				// return nil
-				return sdk.ErrBackoffRetry // stop calling read function
+				return sdk.ErrBackoffRetry
 			}
 			undecoded := rows.GetSerializedBinaryRows()
 			for len(undecoded) > 0 {
@@ -260,12 +183,12 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Avro
 
 				if err != nil {
 					if err == io.EOF {
+						err = nil
 						break
 					}
 					return fmt.Errorf("decoding error with %d bytes remaining: %v", len(undecoded), err)
 				}
 				response := printDatum(datum)
-				fmt.Println("**********Response for line: ", response)
 				// Metadata: map[string]string{
 				// 	"action": "delete",
 				// },
@@ -282,9 +205,71 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Avro
 					Payload:   sdk.RawData(byteSlice)}
 
 				responseCh <- record
-
+				sdk.Logger(ctx).Info().Msg("Will show data")
 				undecoded = remainingBytes
 			}
 		}
 	}
+}
+
+// listTables demonstrates iterating through the collection of tables in a given dataset.
+func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
+	ctx := context.Background()
+	tables := []string{}
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(s.Config.Config.ConfigServiceAccount))
+	if err != nil {
+		return []string{}, fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	ts := client.Dataset(datasetID).Tables(ctx)
+	for {
+		t, err := ts.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return []string{}, err
+		}
+		tables = append(tables, t.TableID)
+	}
+	return tables, nil
+}
+
+// printDatum prints the decoded row datum.
+func printDatum(d interface{}) (response []string) {
+	log.Println("Came here")
+	m, ok := d.(map[string]interface{})
+	if !ok {
+		log.Printf("failed type assertion: %v", d)
+	}
+	// Go's map implementation returns keys in a random ordering, so we sort the keys before accessing.
+	keys := make([]string, len(m))
+	i := 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		response = append(response, fmt.Sprintf("%s: %-20v \n", key, valueFromTypeMap(m[key])))
+	}
+
+	return response
+}
+
+// valueFromTypeMap returns the first value/key in the type map.  This function
+// is only suitable for simple schemas, as complex typing such as arrays and
+// records necessitate a more robust implementation.  See the goavro library
+// and the Avro specification for more information.
+func valueFromTypeMap(field interface{}) interface{} {
+	m, ok := field.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	for _, v := range m {
+		return v
+	}
+	return nil
 }
