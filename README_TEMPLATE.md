@@ -1,11 +1,8 @@
-### Conduit Connector for <resource>
-[Conduit](https://conduit.io) for <resource>.
+### Conduit Connector for BigQuery
+[Conduit](https://conduit.io) for BigQuery.
 
 #### Source
-A source connector pulls data from an external resource and pushes it to downstream resources via Conduit.
-
-#### Destination
-A destination connector pushes data from upstream resources to an external resource via Conduit.
+A source connector pulls data from bigquery and pushes it to downstream resources via Conduit.
 
 ### How to build?
 Run `make build` to build the connector.
