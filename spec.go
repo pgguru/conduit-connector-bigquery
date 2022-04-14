@@ -16,7 +16,7 @@ func Specification() sdk.Specification {
 			ConfigServiceAccount: {
 				Default:     "",
 				Required:    true,
-				Description: "Google project ID.",
+				Description: "Service account with data pulling access.",
 			},
 			ConfigProjectID: {
 				Default:     "",
@@ -26,12 +26,12 @@ func Specification() sdk.Specification {
 			ConfigDatasetID: {
 				Default:     "",
 				Required:    true,
-				Description: "Google dataset ID.",
+				Description: "Google Bigqueries dataset ID.",
 			},
 			ConfigTableID: {
 				Default:     "",
 				Required:    false,
-				Description: "Google table ID",
+				Description: "Google Bigqueries table ID. Can provide `,` separated ID. Will pull whole dataset if no tableID provided.",
 			},
 		},
 	}
