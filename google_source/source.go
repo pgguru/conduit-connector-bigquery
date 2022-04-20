@@ -110,7 +110,11 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 
 func (s *Source) Teardown(ctx context.Context) error {
 
-	close(s.SDKResponse)
-	s.BQReadClient.Close()
+	if s.SDKResponse != nil {
+		close(s.SDKResponse)
+	}
+	if s.BQReadClient != nil {
+		s.BQReadClient.Close()
+	}
 	return nil
 }
