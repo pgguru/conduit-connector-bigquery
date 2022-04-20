@@ -11,7 +11,6 @@ func TestParseNoConfig(t *testing.T) {
 	if err == nil {
 		t.Errorf("parse source config, got no error")
 	}
-
 }
 
 func TestParseSourceConfigAllConfigPresent(t *testing.T) {

@@ -138,7 +138,6 @@ func TestSuccessfulGet(t *testing.T) {
 	}
 
 	for i := 0; i <= 4; i++ {
-		// fmt.Println("Calling read again....")
 		record, err := src.Read(ctx)
 		if err != nil || ctx.Err() != nil {
 			fmt.Println(err)
@@ -162,7 +161,6 @@ func TestSuccessfulGet(t *testing.T) {
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
 
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -175,23 +173,19 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
 	cfg[googlebigquery.ConfigProjectID] = projectID
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	// cfg[googlebigquery.ConfigTableID] = tableID
-
-	// cfg[googlebigquery.ConfigServiceAccount] = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json"
-	// cfg[googlebigquery.ConfigProjectID] = "conduit-connectors"
-	// cfg[googlebigquery.ConfigDatasetID] = "conduit_1"
-	// // cfg[googlebigquery.ConfigTableID] = "test1"
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
 		fmt.Println(err)
+		t.Errorf("some other error found: %v", err)
 	}
 
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err != nil {
 		fmt.Println("errror: ", err)
+		t.Errorf("some other error found: %v", err)
 	}
 
 	for {
@@ -202,7 +196,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 			break
 		}
 		if err != nil {
-			t.Errorf("some other game found: %v", err)
+			t.Errorf("some other error found: %v", err)
 		}
 		value := string(record.Position)
 		fmt.Println("Record found:", value)
@@ -220,14 +214,23 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 
 func TestSuccessfulTearDown(t *testing.T) {
 
+	err := dataSetup()
+	if err != nil {
+		fmt.Println("Could not create values. Err: ", err)
+		return
+	}
+	defer cleanupDataSet()
+
 	src := Source{}
 	cfg := map[string]string{}
-	cfg[googlebigquery.ConfigServiceAccount] = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json"
-	cfg[googlebigquery.ConfigProjectID] = "conduit-connectors"
-	cfg[googlebigquery.ConfigDatasetID] = "conduit_1"
-	cfg[googlebigquery.ConfigTableID] = "test1"
+
+	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
+	cfg[googlebigquery.ConfigProjectID] = projectID
+	cfg[googlebigquery.ConfigDatasetID] = datasetID
+	cfg[googlebigquery.ConfigTableID] = tableID
+
 	ctx := context.Background()
-	err := src.Configure(ctx, cfg)
+	err = src.Configure(ctx, cfg)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -242,5 +245,87 @@ func TestSuccessfulTearDown(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 
+	}
+}
+
+func TestInvalidCreds(t *testing.T) {
+
+	src := Source{}
+	cfg := map[string]string{}
+	cfg[googlebigquery.ConfigServiceAccount] = "invalid"
+	cfg[googlebigquery.ConfigProjectID] = projectID
+	cfg[googlebigquery.ConfigDatasetID] = datasetID
+	cfg[googlebigquery.ConfigTableID] = tableID
+
+	ctx := context.Background()
+	err := src.Configure(ctx, cfg)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	pos := sdk.Position{}
+	err = src.Open(ctx, pos)
+	if err != nil {
+		fmt.Println("errror: ", err)
+	}
+
+	for i := 0; i <= 4; i++ {
+		record, err := src.Read(ctx)
+		if err != nil || ctx.Err() != nil {
+			fmt.Println(err)
+			break
+		}
+
+		value := string(record.Position)
+		fmt.Printf("Record position found: %s", value)
+
+		value = string(record.Payload.Bytes())
+		fmt.Println(" :", value)
+	}
+
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+
+	}
+
+}
+
+func TestNewSource(t *testing.T) {
+	NewSource()
+}
+
+func TestAck(t *testing.T) {
+	s := NewSource()
+	s.Ack(context.TODO(), sdk.Position{})
+}
+
+func TestTableFetchInvalidCred(t *testing.T) {
+	s := Source{}
+	_, err := s.listTables("", "")
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+}
+
+func TestValueFromTypeMap(t *testing.T) {
+
+	type testStruct struct {
+		name  string
+		value *int
+	}
+	value := 1
+	valueFromTypeMap(testStruct{name: "Test", value: &value})
+}
+
+func TestNextContextDone(t *testing.T) {
+
+	s := Source{}
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err := s.Next(ctx)
+	if err == nil {
+		t.Errorf("expected error, got nil")
 	}
 }
