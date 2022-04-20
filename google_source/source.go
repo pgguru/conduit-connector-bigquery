@@ -2,8 +2,8 @@ package googlesource
 
 import (
 	"context"
+	"log"
 	"strings"
-	"time"
 
 	bqStorage "cloud.google.com/go/bigquery/storage/apiv1"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -18,12 +18,19 @@ type Source struct {
 	BQReadClient  *bqStorage.BigQueryReadClient
 	Config        googlebigquery.SourceConfig
 	Tables        []string
-	Ch            chan *bqStoragepb.AvroRows
+	Ch            chan avroRecord
 	Ctx           context.Context
 	ResponseCh    chan *[]string
 	ResultCh      chan *[]string
 	ErrResponseCh chan error
 	SDKResponse   chan sdk.Record
+	// tomb          *tomb.Tomb
+	readStream string
+}
+
+type avroRecord struct {
+	avroRow *bqStoragepb.AvroRows
+	offset  int
 }
 
 func NewSource() sdk.Source {
@@ -66,6 +73,11 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 
 	for _, tableID := range s.Tables {
 		err = s.ReadDataFromEndpoint(bqReadClient, tableID)
+		if err != nil {
+			log.Println("Error found in reading data ", err)
+			sdk.Logger(ctx).Error().Str("err:", err.Error()).Msg("Error found in reading data")
+			return
+		}
 	}
 
 	sdk.Logger(ctx).Debug().Msg("end of function: open")
@@ -75,25 +87,17 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 
 	sdk.Logger(ctx).Debug().Msg("Stated read function")
-
 	var response sdk.Record
-	var ok bool
-	time.Sleep(2 * time.Second)
 
-	if len(s.SDKResponse) <= 0 {
-		// Sleep so that we wait for first entry to get inserted into response in case of any delay from endpoint.
-		time.Sleep(2 * time.Second)
-		if len(s.SDKResponse) <= 0 {
-			sdk.Logger(ctx).Debug().Msg("no more values in repsonse. closing the channel now.")
-			close(s.SDKResponse)
-			<-ctx.Done()
-			return sdk.Record{}, ctx.Err()
-		}
-	}
-	if response, ok = <-s.SDKResponse; !ok {
+	if !s.HasNext() {
 		sdk.Logger(ctx).Debug().Msg("no more values in repsonse. closing the channel now.")
-		close(s.SDKResponse)
 		return sdk.Record{}, sdk.ErrBackoffRetry
+	}
+
+	response, err := s.Next(s.Ctx)
+	if err != nil {
+		sdk.Logger(ctx).Debug().Str("err", err.Error()).Msg("Error from endpoint.")
+		return sdk.Record{}, err
 	}
 
 	return response, nil
@@ -106,6 +110,7 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 
 func (s *Source) Teardown(ctx context.Context) error {
 
+	close(s.SDKResponse)
 	s.BQReadClient.Close()
 	return nil
 }

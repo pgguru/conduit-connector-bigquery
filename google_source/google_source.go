@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/gob"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"sort"
+	"strconv"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -30,11 +30,12 @@ var rpcOpts = gax.WithGRPCOptions(
 	grpc.MaxCallRecvMsgSize(1024 * 1024 * 129),
 )
 
+// This is for future implementation.
 // Command-line flags.
-var (
-	snapshotMillis = flag.Int64("snapshot_millis", 0,
-		"Snapshot time to use for reads, represented in epoch milliseconds format.  Default behavior reads current data.")
-)
+// var (
+// 	snapshotMillis = flag.Int64("snapshot_millis", 0,
+// 		"Snapshot time to use for reads, represented in epoch milliseconds format.  Default behavior reads current data.")
+// )
 
 // ReadDataFromEndpoint read data from google bigquery
 func (s *Source) ReadDataFromEndpoint(bqReadClient *bqStorage.BigQueryReadClient, tableID string) (err error) {
@@ -79,43 +80,44 @@ func (s *Source) ReadDataFromEndpoint(bqReadClient *bqStorage.BigQueryReadClient
 	}
 
 	if len(s.Session.GetStreams()) == 0 {
-		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("no streams in session.  if this was a small query result, consider writing to output to a named table.")
+		sdk.Logger(s.Ctx).Error().Str("err", "no stream found").Msg("no streams in session.  if this was a small query result, consider writing to output to a named table.")
 		return errors.New("no session found")
 	}
 
-	readStream := s.Session.GetStreams()[0].Name
-	s.Ch = make(chan *bqStoragepb.AvroRows, 1)
+	s.readStream = s.Session.GetStreams()[0].Name
+	s.Ch = make(chan avroRecord, 1)
 
-	go func() (err error) {
-		defer close(s.Ch)
-		if err := processStream(s.Ctx, s.BQReadClient, readStream, s.Ch); err != nil {
-			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("processStream failure:")
-			return errors.New("no session found")
-		}
-		return nil
-	}()
-
-	go func() (err error) {
-		err = processAvro(s.Ctx, s.Session.GetAvroSchema().GetSchema(), s.Ch, s.SDKResponse)
-		if err != nil && err == sdk.ErrBackoffRetry {
-			sdk.Logger(s.Ctx).Info().Str("tableID", tableID).Msg("Done processing table")
-			return nil
-		} else if err != nil {
-			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error found")
-			return err
-		}
-
-		return nil
-	}()
+	go s.PullData()
+	go s.FlushingData()
 	return err
 
+}
+
+func (s *Source) PullData() (err error) {
+	defer close(s.Ch)
+	if err := processStream(s.Ctx, s.BQReadClient, s.readStream, s.Ch); err != nil {
+		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("processStream failure")
+	}
+	return err
+}
+
+func (s *Source) FlushingData() (err error) {
+	err = processAvro(s.Ctx, s.Session.GetAvroSchema().GetSchema(), s.Ch, s.SDKResponse)
+	if err != nil && err == sdk.ErrBackoffRetry {
+		sdk.Logger(s.Ctx).Info().Msg("Done processing table")
+		return
+	} else if err != nil {
+		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error found")
+		return
+	}
+	return err
 }
 
 // processStream reads rows from a single storage Stream, and sends the Avro
 // data blocks to a channel. This function will retry on transient stream
 // failures and bookmark progress to avoid re-reading data that's already been
 // successfully transmitted.
-func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st string, ch chan<- *bqStoragepb.AvroRows) error {
+func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st string, ch chan<- avroRecord) error {
 	var offset int64
 
 	// Streams may be long-running.  Rather than using a global retry for the
@@ -149,10 +151,11 @@ func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st
 
 			rc := r.GetRowCount()
 			if rc > 0 {
+				initialOffset := offset
 				offset = offset + rc
 				retries = 0
-				ch <- r.GetAvroRows()
-
+				avroRecord := avroRecord{avroRow: r.GetAvroRows(), offset: int(initialOffset)}
+				ch <- avroRecord
 			}
 		}
 	}
@@ -162,7 +165,7 @@ func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st
 // schema to decode the blocks into individual row messages for printing.  Will
 // continue to run until the channel is closed or the provided context is
 // cancelled.
-func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.AvroRows, responseCh chan<- sdk.Record) error {
+func processAvro(ctx context.Context, schema string, ch <-chan avroRecord, responseCh chan<- sdk.Record) error {
 	codec, err := goavro.NewCodec(schema)
 	if err != nil {
 		return fmt.Errorf("couldn't create codec: %v", err)
@@ -176,7 +179,9 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Avro
 			if !ok {
 				return sdk.ErrBackoffRetry
 			}
-			undecoded := rows.GetSerializedBinaryRows()
+
+			offset := rows.offset
+			undecoded := rows.avroRow.GetSerializedBinaryRows()
 			for len(undecoded) > 0 {
 				datum, remainingBytes, err := codec.NativeFromBinary(undecoded)
 
@@ -188,23 +193,21 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Avro
 					return fmt.Errorf("decoding error with %d bytes remaining: %v", len(undecoded), err)
 				}
 				response := printDatum(datum)
-				// Metadata: map[string]string{
-				// 	"action": "delete",
-				// },
-				// Position:  p.ToRecordPosition(),
-				// Key:       sdk.RawData(entry.key),
-				// CreatedAt: entry.lastModified,
 
 				buffer := &bytes.Buffer{}
 				gob.NewEncoder(buffer).Encode(response)
 				byteSlice := buffer.Bytes()
 
+				byteSlicePos := []byte(strconv.Itoa(offset))
+
 				record := sdk.Record{
 					CreatedAt: time.Now().UTC(),
-					Payload:   sdk.RawData(byteSlice)}
+					Payload:   sdk.RawData(byteSlice),
+					Position:  byteSlicePos}
 
 				responseCh <- record
 				undecoded = remainingBytes
+				offset = offset + 1
 			}
 		}
 	}
@@ -237,7 +240,6 @@ func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
 
 // printDatum prints the decoded row datum.
 func printDatum(d interface{}) (response []string) {
-	log.Println("Came here")
 	m, ok := d.(map[string]interface{})
 	if !ok {
 		log.Printf("failed type assertion: %v", d)
@@ -270,4 +272,26 @@ func valueFromTypeMap(field interface{}) interface{} {
 		return v
 	}
 	return nil
+}
+
+// Next returns the next record from the buffer.
+func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
+	select {
+	case r := <-s.SDKResponse:
+		return r, nil
+	case <-ctx.Done():
+		return sdk.Record{}, ctx.Err()
+	}
+}
+
+func (s *Source) HasNext() bool {
+	if len(s.SDKResponse) <= 0 {
+		sdk.Logger(s.Ctx).Debug().Msg("We will try in 2 seconds.")
+		time.Sleep(2 * time.Second)
+		if len(s.SDKResponse) <= 0 {
+			sdk.Logger(s.Ctx).Debug().Msg("We are done with pulling info")
+			return false
+		}
+	}
+	return true
 }
