@@ -26,8 +26,8 @@ server to validate configuration and dynamically display configuration options t
 ### Configuration
 
 | name |  description | required | default value |
-|------|---------|-------------|----------|---------------|
-|`serviceAccount`|Path to service account file with access to project|false| |
-|`srcProjectID`| The |false| |
-|`srcDatasetID`|The number of acknowledgments required before considering a record written to Kafka. Valid values: 0, 1, all|false||
-|`srcTableID`|The number of acknowledgments required before considering a record written to Kafka. Valid values: 0, 1, all|false||
+|------|---------|-------------|----------|
+|`serviceAccount`|Path to service account file with access to project|true| false|
+|`srcProjectID`| The Project ID on endpoint|true| false|
+|`srcDatasetID`|The dataset ID to pull data from.|true|false|
+|`srcTableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|false|
