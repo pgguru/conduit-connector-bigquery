@@ -1,15 +1,29 @@
+// Copyright © 2022 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package googlesource
 
 import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"sort"
-	"strconv"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -38,18 +52,18 @@ var rpcOpts = gax.WithGRPCOptions(
 // )
 
 // ReadDataFromEndpoint read data from google bigquery
-func (s *Source) ReadDataFromEndpoint(bqReadClient *bqStorage.BigQueryReadClient, tableID string) (err error) {
+func (s *Source) ReadDataFromEndpoint(bqReadClient *bqStorage.BigQueryReadClient, tableID string, pos Position) (err error) {
 
 	readTable := fmt.Sprintf("projects/%s/datasets/%s/tables/%s",
-		s.Config.Config.ConfigProjectID,
-		s.Config.Config.ConfigDatasetID,
-		tableID,
+		s.SourceConfig.Config.ConfigProjectID,
+		s.SourceConfig.Config.ConfigDatasetID,
+		pos.TableID,
 	)
 
 	tableReadOptions := &bqStoragepb.ReadSession_TableReadOptions{}
 
 	createReadSessionRequest := &bqStoragepb.CreateReadSessionRequest{
-		Parent: fmt.Sprintf("projects/%s", s.Config.Config.ConfigProjectID),
+		Parent: fmt.Sprintf("projects/%s", s.SourceConfig.Config.ConfigProjectID),
 		ReadSession: &bqStoragepb.ReadSession{
 			Table:       readTable,
 			DataFormat:  bqStoragepb.DataFormat_AVRO,
@@ -85,26 +99,35 @@ func (s *Source) ReadDataFromEndpoint(bqReadClient *bqStorage.BigQueryReadClient
 	}
 
 	s.readStream = s.Session.GetStreams()[0].Name
-	s.Ch = make(chan avroRecord, 1)
+	s.AvroRecordCh = make(chan avroRecord, 1)
 
-	go s.PullData()
-	go s.FlushingData()
+	go func() (err error) {
+		sdk.Logger(s.Ctx).Trace().Str("tablidID", tableID).Msg("started go routine for pull data")
+		err = s.PullData(pos)
+		return err
+	}()
+
+	go func() (err error) {
+		sdk.Logger(s.Ctx).Trace().Str("tablidID", tableID).Msg("started go routine for Flush Data")
+		err = s.FlushingData(tableID)
+		return err
+	}()
 	return err
 
 }
 
-func (s *Source) PullData() (err error) {
-	defer close(s.Ch)
-	if err := processStream(s.Ctx, s.BQReadClient, s.readStream, s.Ch); err != nil {
+func (s *Source) PullData(pos Position) (err error) {
+	defer close(s.AvroRecordCh)
+	if err := processStream(s.Ctx, s.BQReadClient, s.readStream, s.AvroRecordCh, pos); err != nil {
 		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("processStream failure")
 	}
 	return err
 }
 
-func (s *Source) FlushingData() (err error) {
-	err = processAvro(s.Ctx, s.Session.GetAvroSchema().GetSchema(), s.Ch, s.SDKResponse)
+func (s *Source) FlushingData(tableID string) (err error) {
+	err = s.processAvro(tableID, s.AvroRecordCh, s.SDKResponse)
 	if err != nil && err == sdk.ErrBackoffRetry {
-		sdk.Logger(s.Ctx).Info().Msg("Done processing table")
+		sdk.Logger(s.Ctx).Trace().Msg("Done processing table")
 		return
 	} else if err != nil {
 		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error found")
@@ -117,16 +140,17 @@ func (s *Source) FlushingData() (err error) {
 // data blocks to a channel. This function will retry on transient stream
 // failures and bookmark progress to avoid re-reading data that's already been
 // successfully transmitted.
-func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st string, ch chan<- avroRecord) error {
+func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st string, avroRecordCh chan<- avroRecord, pos Position) error {
 	var offset int64
-
+	// offset = int64(pos.Offset)
+	fmt.Println("Offset: ", offset)
 	// Streams may be long-running.  Rather than using a global retry for the
 	// stream, implement a retry that resets once progress is made.
 	retryLimit := 3
-
+	offset = int64(1)
 	for {
 		retries := 0
-
+		fmt.Println("*******Offset: ", offset)
 		rowStream, err := client.ReadRows(ctx, &bqStoragepb.ReadRowsRequest{
 			ReadStream: st,
 			Offset:     offset,
@@ -155,9 +179,11 @@ func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st
 				offset = offset + rc
 				retries = 0
 				avroRecord := avroRecord{avroRow: r.GetAvroRows(), offset: int(initialOffset)}
-				ch <- avroRecord
+				avroRecordCh <- avroRecord
 			}
+			fmt.Println("*******Offset inside if: ", offset)
 		}
+		fmt.Println("*******Offset outside if: ", offset)
 	}
 }
 
@@ -165,17 +191,17 @@ func processStream(ctx context.Context, client *bqStorage.BigQueryReadClient, st
 // schema to decode the blocks into individual row messages for printing.  Will
 // continue to run until the channel is closed or the provided context is
 // cancelled.
-func processAvro(ctx context.Context, schema string, ch <-chan avroRecord, responseCh chan<- sdk.Record) error {
-	codec, err := goavro.NewCodec(schema)
+func (s *Source) processAvro(tableID string, avroRecordCh <-chan avroRecord, responseCh chan<- sdk.Record) error {
+	codec, err := goavro.NewCodec(s.Session.GetAvroSchema().GetSchema())
 	if err != nil {
 		return fmt.Errorf("couldn't create codec: %v", err)
 	}
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-s.Ctx.Done():
 			return nil
-		case rows, ok := <-ch:
+		case rows, ok := <-avroRecordCh:
 			if !ok {
 				return sdk.ErrBackoffRetry
 			}
@@ -198,13 +224,22 @@ func processAvro(ctx context.Context, schema string, ch <-chan avroRecord, respo
 				gob.NewEncoder(buffer).Encode(response)
 				byteSlice := buffer.Bytes()
 
-				byteSlicePos := []byte(strconv.Itoa(offset))
+				position := Position{
+					TableID: tableID,
+					Offset:  offset,
+				}
+
+				recPosition, err := json.Marshal(&position)
+				if err != nil {
+					sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
+					continue
+				}
 
 				record := sdk.Record{
 					CreatedAt: time.Now().UTC(),
-					Payload:   sdk.RawData(byteSlice),
-					Position:  byteSlicePos}
-
+					Payload:   sdk.RawData(byteSlice), //sdk.StructuredData TODO:
+					Position:  recPosition}
+				// fmt.Printf("Record processed: %+v", record)
 				responseCh <- record
 				undecoded = remainingBytes
 				offset = offset + 1
@@ -218,7 +253,7 @@ func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
 	ctx := context.Background()
 	tables := []string{}
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(s.Config.Config.ConfigServiceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 	if err != nil {
 		return []string{}, fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -289,7 +324,7 @@ func (s *Source) HasNext() bool {
 		sdk.Logger(s.Ctx).Debug().Msg("We will try in 2 seconds.")
 		time.Sleep(2 * time.Second)
 		if len(s.SDKResponse) <= 0 {
-			sdk.Logger(s.Ctx).Debug().Msg("We are done with pulling info")
+			sdk.Logger(s.Ctx).Trace().Msg("We are done with pulling info")
 			return false
 		}
 	}
