@@ -16,9 +16,7 @@ package googlesource
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -33,17 +31,8 @@ type Source struct {
 	BQReadClient *bigquery.Client
 	SourceConfig googlebigquery.SourceConfig
 	Tables       []string
-	AvroRecordCh chan avroRecord
 	Ctx          context.Context
-	ResponseCh   chan *[]string
-	ResultCh     chan *[]string
 	SDKResponse  chan sdk.Record
-	readStream   string
-}
-
-type avroRecord struct {
-	avroRow *bqStoragepb.AvroRows
-	offset  int
 }
 
 type Position struct {
@@ -59,7 +48,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	sdk.Logger(ctx).Trace().Msg("Configuring a Source Connector.")
 	sourceConfig, err := googlebigquery.ParseSourceConfig(cfg)
 	if err != nil {
-		sdk.Logger(ctx).Error().Msg("blank config provided")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("blank config provided")
 		return err
 	}
 
@@ -151,28 +140,4 @@ func (s *Source) Teardown(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func fetchPos(s *Source, pos sdk.Position) (position Position) {
-	position = Position{TableID: "", Offset: 0}
-	err := json.Unmarshal(pos, &position)
-	if err != nil {
-		sdk.Logger(s.Ctx).Info().Str("err", err.Error()).Msg("Could not get position. Will start with offset 0")
-		position = Position{TableID: "", Offset: 0}
-		err = nil
-	}
-	return position
-}
-
-func getTables(s *Source) (err error) {
-	if s.SourceConfig.Config.ConfigTableID == "" {
-
-		s.Tables, err = s.listTables(s.SourceConfig.Config.ConfigProjectID, s.SourceConfig.Config.ConfigDatasetID)
-		if err != nil {
-			sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
-		}
-	} else {
-		s.Tables = strings.SplitAfter(s.SourceConfig.Config.ConfigTableID, ",")
-	}
-	return err
 }

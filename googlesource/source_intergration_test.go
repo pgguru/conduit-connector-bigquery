@@ -37,6 +37,10 @@ var (
 	location       = "US"
 )
 
+func TestData(t *testing.T) {
+	dataSetup()
+}
+
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
 

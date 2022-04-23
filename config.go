@@ -74,9 +74,9 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		return SourceConfig{}, errors.New("dataset ID can't be blank")
 	}
 
-	if _, ok := cfg[ConfigLocation]; !ok {
-		return SourceConfig{}, errors.New("location can't be blank")
-	}
+	// if _, ok := cfg[ConfigLocation]; !ok {
+	// 	return SourceConfig{}, errors.New("location can't be blank")
+	// }
 
 	config := Config{
 		ConfigServiceAccount: cfg[ConfigServiceAccount],
