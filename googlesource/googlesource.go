@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -75,7 +76,6 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 				Position:  recPosition}
 
 			responseCh <- record
-			fmt.Println("end of inner loop")
 		}
 	}
 
@@ -88,7 +88,7 @@ func (s *Source) runGetRow(offset int, tableID string) (it *bigquery.RowIterator
 		"SELECT * FROM `" + s.SourceConfig.Config.ConfigProjectID + "." + s.SourceConfig.Config.ConfigDatasetID + "." + tableID + "` " +
 			"LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset))
 
-	fmt.Println("q: ", q.Q)
+	sdk.Logger(s.Ctx).Trace().Str("q ", q.Q)
 	q.Location = s.SourceConfig.Config.ConfigLocation
 
 	job, err := q.Run(s.Ctx)
@@ -161,4 +161,28 @@ func (s *Source) HasNext() bool {
 		}
 	}
 	return true
+}
+
+func fetchPos(s *Source, pos sdk.Position) (position Position) {
+	position = Position{TableID: "", Offset: 0}
+	err := json.Unmarshal(pos, &position)
+	if err != nil {
+		sdk.Logger(s.Ctx).Info().Str("err", err.Error()).Msg("Could not get position. Will start with offset 0")
+		position = Position{TableID: "", Offset: 0}
+		err = nil
+	}
+	return position
+}
+
+func getTables(s *Source) (err error) {
+	if s.SourceConfig.Config.ConfigTableID == "" {
+
+		s.Tables, err = s.listTables(s.SourceConfig.Config.ConfigProjectID, s.SourceConfig.Config.ConfigDatasetID)
+		if err != nil {
+			sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
+		}
+	} else {
+		s.Tables = strings.SplitAfter(s.SourceConfig.Config.ConfigTableID, ",")
+	}
+	return err
 }
