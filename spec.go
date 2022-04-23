@@ -42,6 +42,11 @@ func Specification() sdk.Specification {
 				Required:    true,
 				Description: "Google Bigqueries dataset ID.",
 			},
+			ConfigLocation: {
+				Default:     "",
+				Required:    true,
+				Description: "Google Bigqueries dataset location.",
+			},
 			ConfigTableID: {
 				Default:     "",
 				Required:    false,

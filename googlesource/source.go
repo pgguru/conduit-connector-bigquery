@@ -17,9 +17,10 @@ package googlesource
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
-	bqStorage "cloud.google.com/go/bigquery/storage/apiv1"
+	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/option"
@@ -29,7 +30,7 @@ import (
 type Source struct {
 	sdk.UnimplementedSource
 	Session      *bqStoragepb.ReadSession
-	BQReadClient *bqStorage.BigQueryReadClient
+	BQReadClient *bigquery.Client
 	SourceConfig googlebigquery.SourceConfig
 	Tables       []string
 	AvroRecordCh chan avroRecord
@@ -69,13 +70,12 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 
 	s.Ctx = ctx
-	bqReadClient, err := bqStorage.NewBigQueryReadClient(ctx, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+	client, err := bigquery.NewClient(ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 	if err != nil {
-		sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found in NewBigQueryStorageClient client creation ")
-		return err
+		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 
-	s.BQReadClient = bqReadClient
+	s.BQReadClient = client
 	var position Position
 
 	if err = getTables(s); err != nil {
@@ -83,9 +83,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 		return err
 	}
 
-	// if pos != nil {
 	position = fetchPos(s, pos)
-	// }
 
 	// s.SDKResponse is a buffered channel that contains records coming from all the tables which user wants to sync.
 	s.SDKResponse = make(chan sdk.Record, 100)
@@ -103,12 +101,12 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 			}
 		}
 
-		position.TableID = tableID
-		err = s.ReadDataFromEndpoint(bqReadClient, tableID, position)
-		if err != nil {
-			sdk.Logger(ctx).Error().Str("err:", err.Error()).Msg("Error found in reading data")
-			return
-		}
+		// position.TableID = tableID
+		go s.ReadGoogleRow(tableID, position, s.SDKResponse)
+		// if err != nil {
+		// 	sdk.Logger(ctx).Error().Str("err:", err.Error()).Msg("Error found in reading data")
+		// 	return
+		// }
 	}
 
 	sdk.Logger(ctx).Trace().Msg("end of function: open")

@@ -32,6 +32,8 @@ const (
 
 	// ConfigServiceAccount path to service account key
 	ConfigServiceAccount = "serviceAccount"
+
+	ConfigLocation = "dataset_location"
 )
 
 // Config represents configuration needed for S3
@@ -40,7 +42,13 @@ type Config struct {
 	ConfigDatasetID      string
 	ConfigTableID        string
 	ConfigServiceAccount string
+	ConfigLocation       string
 }
+
+var (
+	// CounterLimit sets limit of how many rows will be fetched in each job
+	CounterLimit = 100
+)
 
 // SourceConfig is config for source
 type SourceConfig struct {
@@ -66,11 +74,16 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		return SourceConfig{}, errors.New("dataset ID can't be blank")
 	}
 
+	if _, ok := cfg[ConfigLocation]; !ok {
+		return SourceConfig{}, errors.New("location can't be blank")
+	}
+
 	config := Config{
 		ConfigServiceAccount: cfg[ConfigServiceAccount],
 		ConfigProjectID:      cfg[ConfigProjectID],
 		ConfigDatasetID:      cfg[ConfigDatasetID],
-		ConfigTableID:        cfg[ConfigTableID]}
+		ConfigTableID:        cfg[ConfigTableID],
+		ConfigLocation:       cfg[ConfigLocation]}
 
 	return SourceConfig{
 		Config: config,

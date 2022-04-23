@@ -33,6 +33,8 @@ var (
 	projectID      = "conduit-connectors"                                             //replace projectID created
 	datasetID      = "conduit_test_dataset"
 	tableID        = "conduit_test_table"
+	tableID2       = "conduit_test_table_2"
+	location       = "US"
 )
 
 // Initial setup required - project with service account.
@@ -47,14 +49,14 @@ func dataSetup() (err error) {
 	defer client.Close()
 
 	meta := &bigquery.DatasetMetadata{
-		Location: "US", // See https://cloud.google.com/bigquery/docs/locations
+		Location: location, // See https://cloud.google.com/bigquery/docs/locations
 	}
 
 	// create dataset
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
 	}
-
+	fmt.Println("Dataset created")
 	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
@@ -79,9 +81,30 @@ func dataSetup() (err error) {
 		return err
 	}
 
-	if status.Err() != nil {
+	if status.Err() != nil && !strings.Contains(status.Err().Error(), "duplicate") {
 		return fmt.Errorf("job completed with error: %v", status.Err())
 	}
+
+	fmt.Println("Table 1 created")
+	// create another table
+
+	loader = client.Dataset(datasetID).Table(tableID2).LoaderFrom(gcsRef)
+	loader.WriteDisposition = bigquery.WriteEmpty
+
+	job, err = loader.Run(ctx)
+	if err != nil {
+		return err
+	}
+	status, err = job.Wait(ctx)
+	if err != nil {
+		return err
+	}
+
+	if status.Err() != nil && !strings.Contains(status.Err().Error(), "duplicate") {
+		return fmt.Errorf("job completed with error: %v", status.Err())
+	}
+
+	fmt.Println("Table 2 created")
 
 	return nil
 }
@@ -97,6 +120,11 @@ func cleanupDataSet() (err error) {
 	defer client.Close()
 
 	table := client.Dataset(datasetID).Table(tableID)
+	if err := table.Delete(ctx); err != nil {
+		return err
+	}
+
+	table = client.Dataset(datasetID).Table(tableID2)
 	if err := table.Delete(ctx); err != nil {
 		return err
 	}
@@ -140,6 +168,7 @@ func TestSuccessfulGet(t *testing.T) {
 	cfg[googlebigquery.ConfigProjectID] = projectID
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
+	cfg[googlebigquery.ConfigLocation] = location
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -147,7 +176,7 @@ func TestSuccessfulGet(t *testing.T) {
 		fmt.Println(err)
 	}
 
-	pos, err := json.Marshal(Position{TableID: "conduit_test_table", Offset: 2})
+	pos, err := json.Marshal(Position{TableID: "conduit_test_table", Offset: 46})
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -195,6 +224,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
 	cfg[googlebigquery.ConfigProjectID] = projectID
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
+	cfg[googlebigquery.ConfigLocation] = location
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -209,12 +239,13 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		fmt.Println("errror: ", err)
 		t.Errorf("some other error found: %v", err)
 	}
+	time.Sleep(10 * time.Second)
 
 	for {
 
 		record, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			fmt.Println(err)
+			fmt.Println("err: ", err)
 			break
 		}
 		if err != nil {
@@ -225,13 +256,13 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		value = string(record.Payload.Bytes())
 		fmt.Println(":", value)
 	}
-	fmt.Println("Calling teardown for start...")
-	err = src.Teardown(ctx)
-	fmt.Println("Calling teardown...")
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
+	// fmt.Println("Calling teardown for start...")
+	// err = src.Teardown(ctx)
+	// fmt.Println("Calling teardown...")
+	// if err != nil {
+	// 	t.Errorf("expected no error, got %v", err)
 
-	}
+	// }
 }
 
 func TestSuccessfulTearDown(t *testing.T) {
@@ -278,6 +309,7 @@ func TestInvalidCreds(t *testing.T) {
 	cfg[googlebigquery.ConfigProjectID] = projectID
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
+	cfg[googlebigquery.ConfigLocation] = "test"
 
 	ctx := context.Background()
 	err := src.Configure(ctx, cfg)
@@ -287,28 +319,8 @@ func TestInvalidCreds(t *testing.T) {
 
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
-	if err != nil {
-		fmt.Println("errror: ", err)
-	}
-
-	for i := 0; i <= 4; i++ {
-		record, err := src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
-			fmt.Println(err)
-			break
-		}
-
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-	}
-
-	err = src.Teardown(ctx)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-
+	if err == nil {
+		t.Errorf("expected error, got nil")
 	}
 
 }
@@ -330,15 +342,15 @@ func TestTableFetchInvalidCred(t *testing.T) {
 	}
 }
 
-func TestValueFromTypeMap(t *testing.T) {
+// func TestValueFromTypeMap(t *testing.T) {
 
-	type testStruct struct {
-		name  string
-		value *int
-	}
-	value := 1
-	valueFromTypeMap(testStruct{name: "Test", value: &value})
-}
+// 	type testStruct struct {
+// 		name  string
+// 		value *int
+// 	}
+// 	value := 1
+// 	valueFromTypeMap(testStruct{name: "Test", value: &value})
+// }
 
 func TestNextContextDone(t *testing.T) {
 
