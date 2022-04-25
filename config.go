@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 )
 
 const (
@@ -48,6 +49,7 @@ type Config struct {
 var (
 	// CounterLimit sets limit of how many rows will be fetched in each job
 	CounterLimit = 100
+	PollingTime  = time.Minute * 5
 )
 
 // SourceConfig is config for source

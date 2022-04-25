@@ -236,7 +236,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		fmt.Println(err)
 		t.Errorf("some other error found: %v", err)
 	}
-
+	googlebigquery.PollingTime = time.Second * 1
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err != nil {
