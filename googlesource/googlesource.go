@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -17,14 +18,17 @@ import (
 	"google.golang.org/api/option"
 )
 
-func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh chan<- sdk.Record) (err error) {
+func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh chan<- sdk.Record, wg *sync.WaitGroup) (err error) {
 
 	lastRow := false
 	offset := position.Offset
+	defer wg.Done()
 
 	for {
+
+		sdk.Logger(s.Ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
 		if lastRow {
-			sdk.Logger(s.Ctx).Debug().Str("tableID", tableID).Msg("Its the last row. Done processing table")
+			sdk.Logger(s.Ctx).Trace().Str("tableID", tableID).Msg("Its the last row. Done processing table")
 			break
 		}
 
@@ -32,7 +36,6 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 		//iterator
 		it, err := s.runGetRow(offset, tableID)
 		if err != nil {
-			fmt.Println("Error while running job. Err: ", err)
 			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 			return err
 		}
@@ -42,6 +45,7 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 			err := it.Next(&row)
 
 			if err == iterator.Done {
+				sdk.Logger(s.Ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
 				if counter < googlebigquery.CounterLimit {
 					lastRow = true
 				}
@@ -52,21 +56,19 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 				return err
 			}
 
+			offset = offset + 1
 			position := Position{
 				TableID: tableID,
 				Offset:  offset,
 			}
 
-			offset = offset + 1
 			counter = counter + 1
-
 			recPosition, err := json.Marshal(&position)
 			if err != nil {
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
 			}
 			s.wrtieLatestPosition(position)
-			// s.LatestPositions[tableID] = position
 
 			buffer := &bytes.Buffer{}
 			gob.NewEncoder(buffer).Encode(row)
@@ -152,8 +154,13 @@ func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
 // Next returns the next record from the buffer.
 func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	select {
+
+	case <-s.tomb.Dead():
+		return sdk.Record{}, s.tomb.Err()
+
 	case r := <-s.SDKResponse:
 		return r, nil
+
 	case <-ctx.Done():
 		return sdk.Record{}, ctx.Err()
 	default:
