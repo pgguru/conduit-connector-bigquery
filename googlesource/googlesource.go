@@ -65,6 +65,8 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
 			}
+			s.wrtieLatestPosition(position)
+			// s.LatestPositions[tableID] = position
 
 			buffer := &bytes.Buffer{}
 			gob.NewEncoder(buffer).Encode(row)
@@ -80,6 +82,12 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 	}
 
 	return
+}
+
+func (s *Source) wrtieLatestPosition(postion Position) {
+	s.LatestPositions.lock.Lock()
+	s.LatestPositions.LatestPositions[postion.TableID] = postion
+	s.LatestPositions.lock.Unlock()
 }
 
 func (s *Source) runGetRow(offset int, tableID string) (it *bigquery.RowIterator, err error) {
@@ -148,7 +156,10 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 		return r, nil
 	case <-ctx.Done():
 		return sdk.Record{}, ctx.Err()
+	default:
+		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
+
 }
 
 func (s *Source) HasNext() bool {

@@ -17,6 +17,8 @@ package googlesource
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -27,12 +29,20 @@ import (
 
 type Source struct {
 	sdk.UnimplementedSource
-	Session      *bqStoragepb.ReadSession
-	BQReadClient *bigquery.Client
-	SourceConfig googlebigquery.SourceConfig
-	Tables       []string
-	Ctx          context.Context
-	SDKResponse  chan sdk.Record
+	Session         *bqStoragepb.ReadSession
+	BQReadClient    *bigquery.Client
+	SourceConfig    googlebigquery.SourceConfig
+	Tables          []string
+	Ctx             context.Context
+	SDKResponse     chan sdk.Record
+	LatestPositions latestPositions
+	Position        Position
+	ticker          *time.Ticker
+}
+
+type latestPositions struct {
+	LatestPositions map[string]Position
+	lock            sync.Mutex
 }
 
 type Position struct {
@@ -59,47 +69,67 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 
 	s.Ctx = ctx
-	client, err := bigquery.NewClient(ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
-	if err != nil {
-		return fmt.Errorf("bigquery.NewClient: %v", err)
-	}
-
-	s.BQReadClient = client
-	var position Position
-
-	if err = getTables(s); err != nil {
-		sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
-		return err
-	}
-
-	position = fetchPos(s, pos)
+	s.Position = fetchPos(s, pos)
 
 	// s.SDKResponse is a buffered channel that contains records coming from all the tables which user wants to sync.
 	s.SDKResponse = make(chan sdk.Record, 100)
+	s.ticker = time.NewTicker(googlebigquery.PollingTime)
 
-	foundTable := false
+	s.LatestPositions.lock.Lock()
+	s.LatestPositions.LatestPositions = make(map[string]Position)
+	s.LatestPositions.lock.Unlock()
 
-	// Pull records from all the tables and push it to  s.SDKResponse channel
-	for _, tableID := range s.Tables {
-		// if position is provided we check till we get the table name. And read all the table after the table mentioned in position
-		if !foundTable && position.TableID != "" {
-			if position.TableID != tableID {
-				continue
-			} else {
-				foundTable = true
-			}
-		}
-
-		// position.TableID = tableID
-		go s.ReadGoogleRow(tableID, position, s.SDKResponse)
-		// if err != nil {
-		// 	sdk.Logger(ctx).Error().Str("err:", err.Error()).Msg("Error found in reading data")
-		// 	return
-		// }
-	}
+	go s.runIterator()
 
 	sdk.Logger(ctx).Trace().Msg("end of function: open")
 	return nil
+}
+
+func (s *Source) runIterator() (err error) {
+
+	for {
+		select {
+		case <-s.ticker.C:
+			client, err := bigquery.NewClient(s.Ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+			if err != nil {
+				return fmt.Errorf("bigquery.NewClient: %v", err)
+			}
+
+			s.BQReadClient = client
+
+			if err = getTables(s); err != nil {
+				sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
+				return err
+			}
+
+			foundTable := false
+
+			if len(s.LatestPositions.LatestPositions) > 0 {
+				var wg sync.WaitGroup
+				for _, tableID := range s.Tables {
+					wg.Add(1)
+					position := s.LatestPositions.LatestPositions[tableID]
+					go s.ReadGoogleRow(tableID, position, s.SDKResponse)
+				}
+				wg.Wait()
+			} else {
+				var wg sync.WaitGroup
+				for _, tableID := range s.Tables {
+					wg.Add(1)
+					if !foundTable && s.Position.TableID != "" {
+						if s.Position.TableID != tableID {
+							continue
+						} else {
+							foundTable = true
+						}
+					}
+					go s.ReadGoogleRow(tableID, s.Position, s.SDKResponse)
+				}
+				wg.Wait()
+			}
+		}
+	}
+
 }
 
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
