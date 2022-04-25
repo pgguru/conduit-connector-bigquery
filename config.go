@@ -49,7 +49,7 @@ type Config struct {
 var (
 	// CounterLimit sets limit of how many rows will be fetched in each job
 	CounterLimit = 100
-	PollingTime  = time.Minute * 5
+	PollingTime  = time.Minute * 1
 )
 
 // SourceConfig is config for source
@@ -76,9 +76,9 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		return SourceConfig{}, errors.New("dataset ID can't be blank")
 	}
 
-	// if _, ok := cfg[ConfigLocation]; !ok {
-	// 	return SourceConfig{}, errors.New("location can't be blank")
-	// }
+	if _, ok := cfg[ConfigLocation]; !ok {
+		return SourceConfig{}, errors.New("location can't be blank")
+	}
 
 	config := Config{
 		ConfigServiceAccount: cfg[ConfigServiceAccount],

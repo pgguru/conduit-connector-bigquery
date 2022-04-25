@@ -16,6 +16,7 @@ package googlesource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/option"
 	bqStoragepb "google.golang.org/genproto/googleapis/cloud/bigquery/storage/v1"
+	"gopkg.in/tomb.v2"
 )
 
 type Source struct {
@@ -38,6 +40,7 @@ type Source struct {
 	LatestPositions latestPositions
 	Position        Position
 	ticker          *time.Ticker
+	tomb            *tomb.Tomb
 }
 
 type latestPositions struct {
@@ -74,13 +77,13 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	// s.SDKResponse is a buffered channel that contains records coming from all the tables which user wants to sync.
 	s.SDKResponse = make(chan sdk.Record, 100)
 	s.ticker = time.NewTicker(googlebigquery.PollingTime)
+	s.tomb = &tomb.Tomb{}
 
 	s.LatestPositions.lock.Lock()
 	s.LatestPositions.LatestPositions = make(map[string]Position)
 	s.LatestPositions.lock.Unlock()
 
-	go s.runIterator()
-
+	s.tomb.Go(s.runIterator)
 	sdk.Logger(ctx).Trace().Msg("end of function: open")
 	return nil
 }
@@ -89,9 +92,15 @@ func (s *Source) runIterator() (err error) {
 
 	for {
 		select {
+		case <-s.tomb.Dying():
+			return s.tomb.Err()
+
 		case <-s.ticker.C:
+			sdk.Logger(s.Ctx).Error().Msg("ticker started ")
 			client, err := bigquery.NewClient(s.Ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 			if err != nil {
+				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
+				s.tomb.Kill(err)
 				return fmt.Errorf("bigquery.NewClient: %v", err)
 			}
 
@@ -109,7 +118,7 @@ func (s *Source) runIterator() (err error) {
 				for _, tableID := range s.Tables {
 					wg.Add(1)
 					position := s.LatestPositions.LatestPositions[tableID]
-					go s.ReadGoogleRow(tableID, position, s.SDKResponse)
+					go s.ReadGoogleRow(tableID, position, s.SDKResponse, &wg)
 				}
 				wg.Wait()
 			} else {
@@ -123,7 +132,7 @@ func (s *Source) runIterator() (err error) {
 							foundTable = true
 						}
 					}
-					go s.ReadGoogleRow(tableID, s.Position, s.SDKResponse)
+					go s.ReadGoogleRow(tableID, s.Position, s.SDKResponse, &wg)
 				}
 				wg.Wait()
 			}
@@ -136,11 +145,6 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 
 	sdk.Logger(ctx).Trace().Msg("Stated read function")
 	var response sdk.Record
-
-	if !s.HasNext() {
-		sdk.Logger(ctx).Trace().Msg("no more values in repsonse. closing the channel now.")
-		return sdk.Record{}, sdk.ErrBackoffRetry
-	}
 
 	response, err := s.Next(s.Ctx)
 	if err != nil {
@@ -162,12 +166,24 @@ func (s *Source) Teardown(ctx context.Context) error {
 	if s.SDKResponse != nil {
 		close(s.SDKResponse)
 	}
+	err := s.StopIterator()
+	if err != nil {
+		sdk.Logger(s.Ctx).Error().Str("err", string(err.Error())).Msg("got error while closing bigquery client")
+		return err
+	}
+	return nil
+}
+
+func (s *Source) StopIterator() error {
 	if s.BQReadClient != nil {
 		err := s.BQReadClient.Close()
 		if err != nil {
-			sdk.Logger(ctx).Error().Str("err", string(err.Error())).Msg("got error while closing bigquery client")
+			sdk.Logger(s.Ctx).Error().Str("err", string(err.Error())).Msg("got error while closing bigquery client")
 			return err
 		}
 	}
+	s.ticker.Stop()
+	s.tomb.Kill(errors.New("iterator is stopped"))
+
 	return nil
 }

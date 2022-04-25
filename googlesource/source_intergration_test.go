@@ -26,6 +26,7 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/option"
+	"gopkg.in/tomb.v2"
 )
 
 var (
@@ -89,7 +90,7 @@ func dataSetup() (err error) {
 		return fmt.Errorf("job completed with error: %v", status.Err())
 	}
 
-	fmt.Println("Table 1 created")
+	fmt.Println("Table created:", tableID)
 	// create another table
 
 	loader = client.Dataset(datasetID).Table(tableID2).LoaderFrom(gcsRef)
@@ -108,7 +109,7 @@ func dataSetup() (err error) {
 		return fmt.Errorf("job completed with error: %v", status.Err())
 	}
 
-	fmt.Println("Table 2 created")
+	fmt.Println("Table created:", tableID2)
 
 	return nil
 }
@@ -315,6 +316,7 @@ func TestInvalidCreds(t *testing.T) {
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = "test"
 
+	googlebigquery.PollingTime = time.Second * 1
 	ctx := context.Background()
 	err := src.Configure(ctx, cfg)
 	if err != nil {
@@ -323,8 +325,24 @@ func TestInvalidCreds(t *testing.T) {
 
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
-	if err == nil {
+	if err != nil {
 		t.Errorf("expected error, got nil")
+	}
+
+	for {
+
+		record, err := src.Read(ctx)
+		if err != nil && err == sdk.ErrBackoffRetry {
+			fmt.Println("err: ", err)
+			break
+		}
+		if err != nil {
+			t.Errorf("some other error found: %v", err)
+		}
+		value := string(record.Position)
+		fmt.Println("Record found:", value)
+		value = string(record.Payload.Bytes())
+		fmt.Println(":", value)
 	}
 
 }
@@ -362,6 +380,7 @@ func TestNextContextDone(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
+	s.tomb = &tomb.Tomb{}
 	_, err := s.Next(ctx)
 	if err == nil {
 		t.Errorf("expected error, got nil")

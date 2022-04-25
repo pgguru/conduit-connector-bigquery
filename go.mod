@@ -7,6 +7,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.2.0
 	google.golang.org/api v0.73.0
 	google.golang.org/genproto v0.0.0-20220405205423-9d709892a2bf
+	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
 
 require (
@@ -39,5 +40,4 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/grpc v1.45.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
-	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637 // indirect
 )
