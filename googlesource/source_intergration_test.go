@@ -29,13 +29,17 @@ import (
 )
 
 var (
-	serviceAccount = "<replace_me>"       // replace with path to service account with permission for the project
-	projectID      = "conduit-connectors" //replace projectID created
+	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" // replace with path to service account with permission for the project
+	projectID      = "conduit-connectors"                                             //replace projectID created
 	datasetID      = "conduit_test_dataset"
 	tableID        = "conduit_test_table"
-	tableID2       = "conduit_test_table_2"
+	tableID2       = "conduit_test_table_3"
 	location       = "US"
 )
+
+func TestDataSetup(t *testing.T) {
+	dataSetup()
+}
 
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
@@ -161,6 +165,8 @@ func TestSuccessfulGet(t *testing.T) {
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = location
 
+	googlebigquery.PollingTime = time.Second * 1
+
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
@@ -200,7 +206,7 @@ func TestSuccessfulGet(t *testing.T) {
 }
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
-
+	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -224,6 +230,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		fmt.Println(err)
 		t.Errorf("some other error found: %v", err)
 	}
+
 	googlebigquery.PollingTime = time.Second * 1
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
@@ -247,5 +254,11 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		fmt.Println("Record found:", value)
 		value = string(record.Payload.Bytes())
 		fmt.Println(":", value)
+	}
+
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+
 	}
 }

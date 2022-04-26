@@ -156,6 +156,12 @@ func TestInvalidCreds(t *testing.T) {
 		}
 	}
 
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+
+	}
+
 }
 
 func TestNewSource(t *testing.T) {
