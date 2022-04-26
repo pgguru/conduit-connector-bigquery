@@ -18,6 +18,10 @@ import (
 	"google.golang.org/api/option"
 )
 
+var (
+	newClient = bigquery.NewClient //(ctx context.Context, projectID string, opts ...option.ClientOption) (*bigquery.Client, error))
+)
+
 func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh chan<- sdk.Record, wg *sync.WaitGroup) (err error) {
 
 	lastRow := false
@@ -136,7 +140,7 @@ func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
 	ctx := context.Background()
 	tables := []string{}
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+	client, err := newClient(ctx, projectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 	if err != nil {
 		return []string{}, fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -208,7 +212,7 @@ func (s *Source) runIterator() (err error) {
 		case <-s.ticker.C:
 			sdk.Logger(s.Ctx).Error().Msg("ticker started ")
 			// create new client everytime the new sync start. This make sure and new tables coming in are handled.
-			client, err := bigquery.NewClient(s.Ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+			client, err := newClient(s.Ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 			if err != nil {
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
 				s.tomb.Kill(err)
