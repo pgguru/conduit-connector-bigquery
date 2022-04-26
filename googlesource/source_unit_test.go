@@ -48,7 +48,11 @@ func TestSuccessfulTearDown(t *testing.T) {
 		fmt.Println("Could not create values. Err: ", err)
 		return
 	}
-	defer cleanupDataSet()
+
+	defer func() {
+		err := cleanupDataSet()
+		fmt.Println("Got error while cleanup. Err: ", err)
+	}()
 
 	src := Source{}
 	cfg := map[string]string{}
@@ -87,7 +91,10 @@ func TestMultipleTables(t *testing.T) {
 		fmt.Println("Could not create values. Err: ", err)
 		return
 	}
-	defer cleanupDataSet()
+	defer func() {
+		err := cleanupDataSet()
+		fmt.Println("Got error while cleanup. Err: ", err)
+	}()
 
 	src := Source{}
 	cfg := map[string]string{}
@@ -157,7 +164,10 @@ func TestNewSource(t *testing.T) {
 
 func TestAck(t *testing.T) {
 	s := NewSource()
-	s.Ack(context.TODO(), sdk.Position{})
+	err := s.Ack(context.TODO(), sdk.Position{})
+	if err != nil {
+		t.Errorf("Got err: %v", err)
+	}
 }
 
 func TestTableFetchInvalidCred(t *testing.T) {

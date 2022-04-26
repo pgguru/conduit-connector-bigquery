@@ -79,7 +79,10 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 			s.wrtieLatestPosition(position)
 
 			buffer := &bytes.Buffer{}
-			gob.NewEncoder(buffer).Encode(row)
+			if err = gob.NewEncoder(buffer).Encode(row); err != nil {
+				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error in encoding")
+				continue
+			}
 			byteSlice := buffer.Bytes()
 
 			record := sdk.Record{
