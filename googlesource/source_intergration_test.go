@@ -37,10 +37,6 @@ var (
 	location       = "US"
 )
 
-func TestData(t *testing.T) {
-	dataSetup()
-}
-
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
 
@@ -152,7 +148,10 @@ func TestSuccessfulGet(t *testing.T) {
 		fmt.Println("Could not create values. Err: ", err)
 		return
 	}
-	defer cleanupDataSet()
+	defer func() {
+		err := cleanupDataSet()
+		fmt.Println("Got error while cleanup. Err: ", err)
+	}()
 
 	src := Source{}
 	cfg := map[string]string{}
@@ -202,14 +201,15 @@ func TestSuccessfulGet(t *testing.T) {
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
 
-	cleanupDataSet()
-
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
 		return
 	}
-	defer cleanupDataSet()
+	defer func() {
+		err := cleanupDataSet()
+		fmt.Println("Got error while cleanup. Err: ", err)
+	}()
 
 	src := Source{}
 	cfg := map[string]string{}
