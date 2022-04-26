@@ -17,14 +17,12 @@ package googlesource
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
-	"google.golang.org/api/option"
 	bqStoragepb "google.golang.org/genproto/googleapis/cloud/bigquery/storage/v1"
 	"gopkg.in/tomb.v2"
 )
@@ -74,7 +72,8 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.Ctx = ctx
 	s.Position = fetchPos(s, pos)
 
-	// s.SDKResponse is a buffered channel that contains records coming from all the tables which user wants to sync.
+	// s.SDKResponse is a buffered channel that contains records
+	//  coming from all the tables which user wants to sync.
 	s.SDKResponse = make(chan sdk.Record, 100)
 	s.ticker = time.NewTicker(googlebigquery.PollingTime)
 	s.tomb = &tomb.Tomb{}
@@ -86,59 +85,6 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.tomb.Go(s.runIterator)
 	sdk.Logger(ctx).Trace().Msg("end of function: open")
 	return nil
-}
-
-func (s *Source) runIterator() (err error) {
-
-	for {
-		select {
-		case <-s.tomb.Dying():
-			return s.tomb.Err()
-
-		case <-s.ticker.C:
-			sdk.Logger(s.Ctx).Error().Msg("ticker started ")
-			client, err := bigquery.NewClient(s.Ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
-			if err != nil {
-				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
-				s.tomb.Kill(err)
-				return fmt.Errorf("bigquery.NewClient: %v", err)
-			}
-
-			s.BQReadClient = client
-
-			if err = getTables(s); err != nil {
-				sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
-				return err
-			}
-
-			foundTable := false
-
-			if len(s.LatestPositions.LatestPositions) > 0 {
-				var wg sync.WaitGroup
-				for _, tableID := range s.Tables {
-					wg.Add(1)
-					position := s.LatestPositions.LatestPositions[tableID]
-					go s.ReadGoogleRow(tableID, position, s.SDKResponse, &wg)
-				}
-				wg.Wait()
-			} else {
-				var wg sync.WaitGroup
-				for _, tableID := range s.Tables {
-					wg.Add(1)
-					if !foundTable && s.Position.TableID != "" {
-						if s.Position.TableID != tableID {
-							continue
-						} else {
-							foundTable = true
-						}
-					}
-					go s.ReadGoogleRow(tableID, s.Position, s.SDKResponse, &wg)
-				}
-				wg.Wait()
-			}
-		}
-	}
-
 }
 
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {

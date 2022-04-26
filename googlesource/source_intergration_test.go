@@ -185,7 +185,7 @@ func TestSuccessfulGet(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	// pos := sdk.Position{}
+
 	err = src.Open(ctx, pos)
 	if err != nil {
 		fmt.Println("errror: ", err)
