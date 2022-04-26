@@ -48,6 +48,7 @@ func TestParseSourceConfigPartialConfig(t *testing.T) {
 	delete(cfg, ConfigServiceAccount)
 	cfg[ConfigProjectID] = "test"
 	cfg[ConfigDatasetID] = "test"
+	cfg[ConfigLocation] = "test"
 
 	_, err := ParseSourceConfig(cfg)
 	if err == nil {
@@ -66,6 +67,14 @@ func TestParseSourceConfigPartialConfig(t *testing.T) {
 	cfg[ConfigServiceAccount] = "test"
 	cfg[ConfigProjectID] = "test"
 	delete(cfg, ConfigDatasetID)
+
+	_, err = ParseSourceConfig(cfg)
+	if err == nil {
+		t.Errorf("parse source config, got error %v", err)
+	}
+
+	cfg[ConfigDatasetID] = "test"
+	delete(cfg, ConfigLocation)
 
 	_, err = ParseSourceConfig(cfg)
 	if err == nil {
