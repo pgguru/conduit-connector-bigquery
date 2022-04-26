@@ -5,16 +5,16 @@
 A source connector pulls data from bigquery and pushes it to downstream resources via Conduit.
 
 ### Implementation
-The connector pulls data from bigquery for a dataset or selected tables of users choice. The connector keeps on
-looking for new insertion happening every minure in any of the table the data is pulled for and syncs it. 
+The connector pulls data from bigquery for a dataset or selected tables of users choice. The connector syncs incrementally this means
+it keeps on looking for new insertion happening every minure in any of the table the data is pulled for and syncs it. 
 If the conduit stops or pauses midway the connector will make sure to pull the data which was not pull earlier. 
-for eg,
-table A and table B are synced.
-Pipeline pause after syncing complete table A and table B till index 5.
-On resuming the pipeline - Connector sync data from table B index 6 and would sync table A again if there were no new row added.
 
-Currently only new insertion  i.e row inserted after the last pulled rows are handled. And updataion/deletion is not
-handled by the connector.
+for eg,
+- table A and table B are synced.
+- Pipeline is paused after syncing complete table A and table B till index 5.
+- On resuming the pipeline - Connector sync data from table B index 6 and would not sync table A's already synced rows.
+
+Currently updataion/deletion is not handled by the connector.
 
 ### How to build?
 Run `make build` to build the connector.
