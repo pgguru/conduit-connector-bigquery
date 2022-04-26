@@ -25,7 +25,7 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 	defer wg.Done()
 
 	for {
-
+		// Keep on reading till end of table
 		sdk.Logger(s.Ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
 		if lastRow {
 			sdk.Logger(s.Ctx).Trace().Str("tableID", tableID).Msg("Its the last row. Done processing table")
@@ -47,6 +47,7 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 			if err == iterator.Done {
 				sdk.Logger(s.Ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
 				if counter < googlebigquery.CounterLimit {
+					// if counter is smaller than the limit we has reached the end of iterator. And will break the for loop now.
 					lastRow = true
 				}
 				break
@@ -68,6 +69,9 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
 			}
+
+			// keep the track of last rows fetched for each table.
+			// this helps in implementing incremental syncing.
 			s.wrtieLatestPosition(position)
 
 			buffer := &bytes.Buffer{}
@@ -76,7 +80,7 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 
 			record := sdk.Record{
 				CreatedAt: time.Now().UTC(),
-				Payload:   sdk.RawData(byteSlice), //sdk.StructuredData TODO:
+				Payload:   sdk.RawData(byteSlice),
 				Position:  recPosition}
 
 			responseCh <- record
@@ -92,6 +96,7 @@ func (s *Source) wrtieLatestPosition(postion Position) {
 	s.LatestPositions.lock.Unlock()
 }
 
+// runGetRow sync data for bigquery using bigquery client jobs
 func (s *Source) runGetRow(offset int, tableID string) (it *bigquery.RowIterator, err error) {
 
 	q := s.BQReadClient.Query(
@@ -169,18 +174,6 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 
 }
 
-func (s *Source) HasNext() bool {
-	if len(s.SDKResponse) <= 0 {
-		sdk.Logger(s.Ctx).Debug().Msg("We will try in 2 seconds.")
-		time.Sleep(2 * time.Second)
-		if len(s.SDKResponse) <= 0 {
-			sdk.Logger(s.Ctx).Trace().Msg("We are done with pulling info")
-			return false
-		}
-	}
-	return true
-}
-
 func fetchPos(s *Source, pos sdk.Position) (position Position) {
 	position = Position{TableID: "", Offset: 0}
 	err := json.Unmarshal(pos, &position)
@@ -203,4 +196,73 @@ func getTables(s *Source) (err error) {
 		s.Tables = strings.SplitAfter(s.SourceConfig.Config.ConfigTableID, ",")
 	}
 	return err
+}
+
+func (s *Source) runIterator() (err error) {
+
+	for {
+		select {
+		case <-s.tomb.Dying():
+			return s.tomb.Err()
+
+		case <-s.ticker.C:
+			sdk.Logger(s.Ctx).Error().Msg("ticker started ")
+			// create new client everytime the new sync start. This make sure and new tables coming in are handled.
+			client, err := bigquery.NewClient(s.Ctx, s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+			if err != nil {
+				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
+				s.tomb.Kill(err)
+				return fmt.Errorf("bigquery.NewClient: %v", err)
+			}
+
+			s.BQReadClient = client
+
+			if err = getTables(s); err != nil {
+				sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
+				return err
+			}
+
+			foundTable := false
+
+			// if its an already running pipeling and we just
+			// want to check for any new row. Send the offset as
+			// last position where we left.
+
+			if len(s.LatestPositions.LatestPositions) > 0 {
+				// wait group make sure that we start new iteration only
+				//  after the first iteration is completely done.
+				var wg sync.WaitGroup
+				for _, tableID := range s.Tables {
+					wg.Add(1)
+					position := s.LatestPositions.LatestPositions[tableID]
+					s.tomb.Go(func() (err error) {
+						return s.ReadGoogleRow(tableID, position, s.SDKResponse, &wg)
+					})
+				}
+				wg.Wait()
+			} else {
+
+				// if the pipeline has newly started and it was earlier synced.
+				// Then we want to skip all the tables which are already synced and
+				// pull only after specified position
+
+				var wg sync.WaitGroup
+				for _, tableID := range s.Tables {
+					wg.Add(1)
+					if !foundTable && s.Position.TableID != "" {
+						if s.Position.TableID != tableID {
+							continue
+						} else {
+							foundTable = true
+						}
+					}
+					s.tomb.Go(func() (err error) {
+						return s.ReadGoogleRow(tableID, s.Position, s.SDKResponse, &wg)
+					})
+				}
+				wg.Wait()
+			}
+		}
+	}
+
 }
