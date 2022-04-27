@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	newClient = bigquery.NewClient //(ctx context.Context, projectID string, opts ...option.ClientOption) (*bigquery.Client, error))
+	newClient = bigquery.NewClient
 )
 
 type readRowInput struct {
@@ -72,7 +72,8 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			if err == iterator.Done {
 				sdk.Logger(s.Ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
 				if counter < googlebigquery.CounterLimit {
-					// if counter is smaller than the limit we has reached the end of iterator. And will break the for loop now.
+					// if counter is smaller than the limit we have reached the end of
+					// iterator. And will break the for loop now.
 					lastRow = true
 				}
 				break
@@ -235,7 +236,7 @@ func (s *Source) runIterator() (err error) {
 
 		case <-s.ticker.C:
 			sdk.Logger(s.Ctx).Trace().Msg("ticker started ")
-			// create new client everytime the new sync start. This make sure and new tables coming in are handled.
+			// create new client everytime the new sync start. This make sure that new tables coming in are handled.
 			client, err := newClient(s.tomb.Context(s.Ctx), s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 			if err != nil {
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")

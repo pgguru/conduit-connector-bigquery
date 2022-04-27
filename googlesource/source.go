@@ -60,7 +60,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	sdk.Logger(ctx).Trace().Msg("Configuring a Source Connector.")
 	sourceConfig, err := googlebigquery.ParseSourceConfig(cfg)
 	if err != nil {
-		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("blank config provided")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("invalid config provided")
 		return err
 	}
 
