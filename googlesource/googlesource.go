@@ -254,9 +254,8 @@ func (s *Source) runIterator() (err error) {
 			foundTable := false
 
 			// if its an already running pipeling and we just
-			// want to check for any new row. Send the offset as
+			// want to check for any new rows. Send the offset as
 			// last position where we left.
-
 			if len(s.LatestPositions.LatestPositions) > 0 {
 				// wait group make sure that we start new iteration only
 				//  after the first iteration is completely done.
@@ -275,7 +274,7 @@ func (s *Source) runIterator() (err error) {
 				wg.Wait()
 			} else {
 
-				// if the pipeline has newly started and it was earlier synced.
+				// if the pipeline has been newly started and it was earlier synced.
 				// Then we want to skip all the tables which are already synced and
 				// pull only after specified position
 
