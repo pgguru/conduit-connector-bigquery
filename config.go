@@ -23,18 +23,19 @@ import (
 
 const (
 	// ConfigProjectID is the config projectID
-	ConfigProjectID = "srcProjectID"
+	ConfigProjectID = "projectID"
 
 	// ConfigDatasetID is the dataset ID
-	ConfigDatasetID = "srcDatasetID"
+	ConfigDatasetID = "datasetID"
 
 	// ConfigTableID is the tableID
-	ConfigTableID = "srcTableID"
+	ConfigTableID = "tableID"
 
 	// ConfigServiceAccount path to service account key
 	ConfigServiceAccount = "serviceAccount"
 
-	ConfigLocation = "dataset_location"
+	// ConfigLocation location of the dataset
+	ConfigLocation = "datasetLocation"
 )
 
 // Config represents configuration needed for S3
@@ -49,7 +50,8 @@ type Config struct {
 var (
 	// CounterLimit sets limit of how many rows will be fetched in each job
 	CounterLimit = 100
-	PollingTime  = time.Minute * 1
+	// PollingTime time after which ticker will pull data
+	PollingTime = time.Minute * 1
 )
 
 // SourceConfig is config for source
