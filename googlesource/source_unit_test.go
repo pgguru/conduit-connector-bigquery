@@ -103,7 +103,7 @@ func TestMultipleTables(t *testing.T) {
 	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
 	cfg[googlebigquery.ConfigProjectID] = projectID
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = fmt.Sprintf("%v,%v", tableID, tableID)
+	cfg[googlebigquery.ConfigTableID] = fmt.Sprintf("%v,%v", tableID, tableID2)
 	cfg[googlebigquery.ConfigLocation] = location
 
 	ctx := context.Background()
@@ -117,8 +117,12 @@ func TestMultipleTables(t *testing.T) {
 	if err != nil {
 		t.Errorf("error found: %v", err)
 	}
-	time.Sleep(15 * time.Second)
+	//time.Sleep(5 * time.Second)
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
 
+	}
 }
 
 func TestInvalidCreds(t *testing.T) {
@@ -140,10 +144,10 @@ func TestInvalidCreds(t *testing.T) {
 
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
-	if err != nil {
-		t.Errorf("expected error, got nil")
+	if err == nil {
+		fmt.Println("we should get error in read")
 	}
-	time.Sleep(15 * time.Second)
+	time.Sleep(10 * time.Second)
 	for {
 
 		_, err := src.Read(ctx)

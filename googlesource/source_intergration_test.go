@@ -29,17 +29,17 @@ import (
 )
 
 var (
-	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" // replace with path to service account with permission for the project
-	projectID      = "conduit-connectors"                                             //replace projectID created
+	serviceAccount = "<replace_me>"       // replace with path to service account with permission for the project
+	projectID      = "conduit-connectors" //replace projectID created
 	datasetID      = "conduit_test_dataset"
 	tableID        = "conduit_test_table"
 	tableID2       = "conduit_test_table_3"
 	location       = "US"
 )
 
-func TestDataSetup(t *testing.T) {
-	dataSetup()
-}
+// func TestDataSetup(t *testing.T) {
+// 	dataSetup()
+// }
 
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
@@ -182,7 +182,7 @@ func TestSuccessfulGet(t *testing.T) {
 	if err != nil {
 		fmt.Println("errror: ", err)
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(15 * time.Second)
 	for i := 0; i <= 4; i++ {
 		record, err := src.Read(ctx)
 		if err != nil || ctx.Err() != nil {

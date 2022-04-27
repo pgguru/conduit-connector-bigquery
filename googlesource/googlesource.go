@@ -22,10 +22,22 @@ var (
 	newClient = bigquery.NewClient //(ctx context.Context, projectID string, opts ...option.ClientOption) (*bigquery.Client, error))
 )
 
-func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh chan<- sdk.Record, wg *sync.WaitGroup) (err error) {
+type readRowInput struct {
+	tableID  string
+	position Position
+	wg       *sync.WaitGroup
+}
+
+func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
+
+	input := <-rowInput
+	position := input.position
+	tableID := input.tableID
+	wg := input.wg
 
 	lastRow := false
 	offset := position.Offset
+
 	defer wg.Done()
 
 	for {
@@ -46,8 +58,17 @@ func (s *Source) ReadGoogleRow(tableID string, position Position, responseCh cha
 
 		for {
 			var row []bigquery.Value
-			err := it.Next(&row)
+			// select statement to make sure channel was not closed by teardown stage
+			select {
+			case <-s.iteratorClosed:
+				sdk.Logger(s.Ctx).Trace().Msg("recieved closed channel")
+				return nil
+			default:
+				sdk.Logger(s.Ctx).Trace().Msg("iterator running")
 
+			}
+
+			err := it.Next(&row)
 			if err == iterator.Done {
 				sdk.Logger(s.Ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
 				if counter < googlebigquery.CounterLimit {
@@ -206,14 +227,14 @@ func getTables(s *Source) (err error) {
 }
 
 func (s *Source) runIterator() (err error) {
-
+	rowInput := make(chan readRowInput)
 	for {
 		select {
 		case <-s.tomb.Dying():
 			return s.tomb.Err()
 
 		case <-s.ticker.C:
-			sdk.Logger(s.Ctx).Error().Msg("ticker started ")
+			sdk.Logger(s.Ctx).Trace().Msg("ticker started ")
 			// create new client everytime the new sync start. This make sure and new tables coming in are handled.
 			client, err := newClient(s.tomb.Context(s.Ctx), s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 			if err != nil {
@@ -239,17 +260,16 @@ func (s *Source) runIterator() (err error) {
 				// wait group make sure that we start new iteration only
 				//  after the first iteration is completely done.
 				var wg sync.WaitGroup
-				for i, tableID := range s.Tables {
+				for _, tableID := range s.Tables {
 					wg.Add(1)
 					position := s.LatestPositions.LatestPositions[tableID]
 
-					// s.tomb.Go(func() (err error) {
-					// 	fmt.Println("The table position inside go routine: ", tableID, s.Tables[i])
-					// 	return s.ReadGoogleRow(s.Tables[i], position, s.SDKResponse, &wg)
-					// })
+					s.tomb.Go(func() (err error) {
+						sdk.Logger(s.Ctx).Trace().Str("position", position.TableID).Msg("The table ID inside go routine ")
+						return s.ReadGoogleRow(rowInput, s.SDKResponse)
+					})
+					rowInput <- readRowInput{tableID: tableID, position: position, wg: &wg}
 
-					// TODO: handle error from goroutine
-					s.ReadGoogleRow(s.Tables[i], position, s.SDKResponse, &wg)
 				}
 				wg.Wait()
 			} else {
@@ -259,6 +279,7 @@ func (s *Source) runIterator() (err error) {
 				// pull only after specified position
 
 				var wg sync.WaitGroup
+
 				for _, tableID := range s.Tables {
 					wg.Add(1)
 					if !foundTable && s.Position.TableID != "" {
@@ -269,11 +290,11 @@ func (s *Source) runIterator() (err error) {
 						}
 					}
 
-					// TODO: handle error from goroutine
-					s.ReadGoogleRow(tableID, s.Position, s.SDKResponse, &wg)
-					// s.tomb.Go(func() (err error) {
-					// 	return s.ReadGoogleRow(tableID, s.Position, s.SDKResponse, &wg)
-					// })
+					s.tomb.Go(func() (err error) {
+						sdk.Logger(s.Ctx).Trace().Str("position", s.Position.TableID).Msg("The table ID inside go routine ")
+						return s.ReadGoogleRow(rowInput, s.SDKResponse)
+					})
+					rowInput <- readRowInput{tableID: tableID, position: s.Position, wg: &wg}
 				}
 				wg.Wait()
 			}
