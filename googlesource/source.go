@@ -39,6 +39,7 @@ type Source struct {
 	Position        Position
 	ticker          *time.Ticker
 	tomb            *tomb.Tomb
+	iteratorClosed  chan bool
 }
 
 type latestPositions struct {
@@ -75,6 +76,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	// s.SDKResponse is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
 	s.SDKResponse = make(chan sdk.Record, 100)
+	s.iteratorClosed = make(chan bool, 1)
 	s.ticker = time.NewTicker(googlebigquery.PollingTime)
 	s.tomb = &tomb.Tomb{}
 
@@ -108,6 +110,9 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
+
+	s.iteratorClosed <- true
+	sdk.Logger(s.Ctx).Error().Msg("Teardown: closing all channels")
 
 	if s.SDKResponse != nil {
 		close(s.SDKResponse)
