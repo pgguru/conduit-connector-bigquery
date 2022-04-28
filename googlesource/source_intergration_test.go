@@ -30,7 +30,7 @@ import (
 
 var (
 	serviceAccount = "<replace_me>"       // replace with path to service account with permission for the project
-	projectID      = "conduit-connectors" //replace projectID created
+	projectID      = "conduit-connectors" // replace projectID created
 	datasetID      = "conduit_test_dataset"
 	tableID        = "conduit_test_table"
 	tableID2       = "conduit_test_table_3"
@@ -43,7 +43,6 @@ var (
 
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
-
 	ctx := context.Background()
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
@@ -114,7 +113,6 @@ func dataSetup() (err error) {
 }
 
 func cleanupDataSet() (err error) {
-
 	ctx := context.Background()
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
@@ -200,9 +198,7 @@ func TestSuccessfulGet(t *testing.T) {
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
-
 }
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
@@ -241,7 +237,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	for {
-
 		record, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println("err: ", err)
@@ -259,6 +254,5 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
 }
