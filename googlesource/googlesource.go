@@ -1,3 +1,17 @@
+// Copyright © 2022 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package googlesource
 
 import (
@@ -29,7 +43,6 @@ type readRowInput struct {
 }
 
 func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
-
 	input := <-rowInput
 	position := input.position
 	tableID := input.tableID
@@ -49,7 +62,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 		}
 
 		counter := 0
-		//iterator
+		// iterator
 		it, err := s.runGetRow(offset, tableID)
 		if err != nil {
 			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
@@ -65,7 +78,6 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 				return nil
 			default:
 				sdk.Logger(s.Ctx).Trace().Msg("iterator running")
-
 			}
 
 			err := it.Next(&row)
@@ -83,13 +95,13 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 				return err
 			}
 
-			offset = offset + 1
+			offset++
 			position := Position{
 				TableID: tableID,
 				Offset:  offset,
 			}
 
-			counter = counter + 1
+			counter++
 			recPosition, err := json.Marshal(&position)
 			if err != nil {
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
@@ -127,7 +139,6 @@ func (s *Source) wrtieLatestPosition(postion Position) {
 
 // runGetRow sync data for bigquery using bigquery client jobs
 func (s *Source) runGetRow(offset int, tableID string) (it *bigquery.RowIterator, err error) {
-
 	q := s.BQReadClient.Query(
 		"SELECT * FROM `" + s.SourceConfig.Config.ConfigProjectID + "." + s.SourceConfig.Config.ConfigDatasetID + "." + tableID + "` " +
 			"LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset))
@@ -188,19 +199,15 @@ func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
 // Next returns the next record from the buffer.
 func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	select {
-
 	case <-s.tomb.Dead():
 		return sdk.Record{}, s.tomb.Err()
-
 	case r := <-s.SDKResponse:
 		return r, nil
-
 	case <-ctx.Done():
 		return sdk.Record{}, ctx.Err()
 	default:
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
-
 }
 
 func fetchPos(s *Source, pos sdk.Position) (position Position) {
@@ -209,14 +216,12 @@ func fetchPos(s *Source, pos sdk.Position) (position Position) {
 	if err != nil {
 		sdk.Logger(s.Ctx).Info().Str("err", err.Error()).Msg("Could not get position. Will start with offset 0")
 		position = Position{TableID: "", Offset: 0}
-		err = nil
 	}
 	return position
 }
 
 func getTables(s *Source) (err error) {
 	if s.SourceConfig.Config.ConfigTableID == "" {
-
 		s.Tables, err = s.listTables(s.SourceConfig.Config.ConfigProjectID, s.SourceConfig.Config.ConfigDatasetID)
 		if err != nil {
 			sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
@@ -233,7 +238,6 @@ func (s *Source) runIterator() (err error) {
 		select {
 		case <-s.tomb.Dying():
 			return s.tomb.Err()
-
 		case <-s.ticker.C:
 			sdk.Logger(s.Ctx).Trace().Msg("ticker started ")
 			// create new client everytime the new sync start. This make sure that new tables coming in are handled.
@@ -269,11 +273,9 @@ func (s *Source) runIterator() (err error) {
 						return s.ReadGoogleRow(rowInput, s.SDKResponse)
 					})
 					rowInput <- readRowInput{tableID: tableID, position: position, wg: &wg}
-
 				}
 				wg.Wait()
 			} else {
-
 				// if the pipeline has been newly started and it was earlier synced.
 				// Then we want to skip all the tables which are already synced and
 				// pull only after specified position
@@ -300,5 +302,4 @@ func (s *Source) runIterator() (err error) {
 			}
 		}
 	}
-
 }
