@@ -34,9 +34,10 @@ type Source struct {
 	Session      *bqStoragepb.ReadSession
 	BQReadClient *bigquery.Client
 	SourceConfig googlebigquery.SourceConfig
-	Tables       []string
-	Ctx          context.Context
-	SDKResponse  chan sdk.Record
+	// haris: isn't this part of config?
+	Tables      []string
+	Ctx         context.Context
+	SDKResponse chan sdk.Record
 	// haris: what's the difference between these two?
 	LatestPositions latestPositions
 	Position        Position
@@ -56,7 +57,8 @@ type latestPositions struct {
 
 type Position struct {
 	TableID string
-	Offset  int
+	// can we use a page token instead?
+	Offset int
 }
 
 func NewSource() sdk.Source {
