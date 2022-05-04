@@ -29,10 +29,11 @@ import (
 
 type Source struct {
 	sdk.UnimplementedSource
-	Session         *bqStoragepb.ReadSession
-	BQReadClient    *bigquery.Client
-	SourceConfig    googlebigquery.SourceConfig
-	Tables          []string
+	Session      *bqStoragepb.ReadSession
+	BQReadClient *bigquery.Client
+	SourceConfig googlebigquery.SourceConfig
+	Tables       []string
+	// do we need Ctx? we have it in all the methods as a param
 	Ctx             context.Context
 	SDKResponse     chan sdk.Record
 	LatestPositions latestPositions
