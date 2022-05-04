@@ -70,7 +70,6 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 }
 
 func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
-
 	s.Ctx = ctx
 	s.Position = fetchPos(s, pos)
 
@@ -91,7 +90,6 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 }
 
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
-
 	sdk.Logger(ctx).Trace().Msg("Stated read function")
 	var response sdk.Record
 
@@ -100,9 +98,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		sdk.Logger(ctx).Trace().Str("err", err.Error()).Msg("Error from endpoint.")
 		return sdk.Record{}, err
 	}
-
 	return response, nil
-
 }
 
 func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
@@ -111,7 +107,6 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-
 	// TODO: understand why handling the closing of iterator fails the plugin
 
 	// s.iteratorClosed <- true
@@ -122,7 +117,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	}
 	err := s.StopIterator()
 	if err != nil {
-		sdk.Logger(s.Ctx).Error().Str("err", string(err.Error())).Msg("got error while closing bigquery client")
+		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("got error while closing bigquery client")
 		return err
 	}
 	return nil
@@ -132,7 +127,7 @@ func (s *Source) StopIterator() error {
 	if s.BQReadClient != nil {
 		err := s.BQReadClient.Close()
 		if err != nil {
-			sdk.Logger(s.Ctx).Error().Str("err", string(err.Error())).Msg("got error while closing bigquery client")
+			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("got error while closing bigquery client")
 			return err
 		}
 	}

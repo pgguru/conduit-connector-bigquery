@@ -32,12 +32,16 @@ var (
 	// make these environmental variables with default values, or an empty value {first two} if it's required by user
 	// check this for a reference https://github.com/ConduitIO/conduit-connector-s3/blob/10078746a718860570bc810f5a0040a096a447a4/source/source_integration_test.go#L611
 	serviceAccount = "<replace_me>"       // replace with path to service account with permission for the project
-	projectID      = "conduit-connectors" //replace projectID created
+	projectID      = "conduit-connectors" // replace projectID created
 	datasetID      = "conduit_test_dataset"
 	tableID        = "conduit_test_table"
-	tableID2       = "conduit_test_table_3"
+	tableID2       = "conduit_test_table_2"
 	location       = "US"
 )
+
+// func TestDataSetup(t *testing.T) {
+// 	dataSetup()
+// }
 
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
@@ -196,12 +200,11 @@ func TestSuccessfulGet(t *testing.T) {
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
-
 }
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
+	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -236,7 +239,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	for {
-
 		record, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println("err: ", err)
@@ -254,6 +256,5 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
 }

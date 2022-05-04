@@ -19,7 +19,6 @@ import (
 )
 
 func TestParseNoConfig(t *testing.T) {
-
 	cfg := map[string]string{}
 	_, err := ParseSourceConfig(cfg)
 	if err == nil {
@@ -28,7 +27,6 @@ func TestParseNoConfig(t *testing.T) {
 }
 
 func TestParseSourceConfigAllConfigPresent(t *testing.T) {
-
 	cfg := map[string]string{}
 	cfg[ConfigServiceAccount] = "test"
 	cfg[ConfigProjectID] = "test"
@@ -39,11 +37,9 @@ func TestParseSourceConfigAllConfigPresent(t *testing.T) {
 	if err != nil {
 		t.Errorf("parse source config, got error %v", err)
 	}
-
 }
 
 func TestParseSourceConfigPartialConfig(t *testing.T) {
-
 	cfg := map[string]string{}
 	delete(cfg, ConfigServiceAccount)
 	cfg[ConfigProjectID] = "test"
@@ -80,7 +76,6 @@ func TestParseSourceConfigPartialConfig(t *testing.T) {
 	if err == nil {
 		t.Errorf("parse source config, got error %v", err)
 	}
-
 }
 
 func TestSpecification(t *testing.T) {
