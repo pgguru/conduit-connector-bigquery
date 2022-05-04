@@ -49,7 +49,7 @@ type Config struct {
 
 var (
 	// CounterLimit sets limit of how many rows will be fetched in each job
-	CounterLimit = 100
+	CounterLimit = 500
 	// PollingTime time after which ticker will pull data
 	PollingTime = time.Minute * 1
 )
