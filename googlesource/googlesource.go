@@ -41,6 +41,8 @@ type readRowInput struct {
 }
 
 // haris: why does rowInput need to be a chan?
+// Neha: the function is getting called inside a goroutine we get wrong value (everytime the last possible values) and
+// func param will change for each function call
 func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
 	input := <-rowInput
 	position := input.position
@@ -61,7 +63,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 		counter := 0
 		// iterator
-		it, err := s.runGetRow(offset, tableID)
+		it, err := s.getRowIterator(offset, tableID)
 		if err != nil {
 			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 			return err
@@ -96,6 +98,9 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			}
 
 			// haris: does BQ have its own way of tracking rows, i.e. its own offsets?
+			// Neha: Could not find any. Tables metadata does not provide any such info.
+			// Users generally have some keys to do so. And we are working on meta-data of
+			// table and not actual data.
 			offset++
 			position := Position{
 				TableID: tableID,
@@ -135,16 +140,19 @@ func (s *Source) wrtieLatestPosition(postion Position) {
 	s.LatestPositions.lock.Unlock()
 }
 
-// runGetRow sync data for bigquery using bigquery client jobs
+// getRowIterator sync data for bigquery using bigquery client jobs
 // haris proposal to rename to getRowIterator, since it's not returning a single row
-func (s *Source) runGetRow(offset int, tableID string) (it *bigquery.RowIterator, err error) {
+// Neha: done
+func (s *Source) getRowIterator(offset int, tableID string) (it *bigquery.RowIterator, err error) {
 	// haris: does BigQuery guarantee ordering?
+	// Neha: it does not. But again orderBy work on any column and we don't have column info.
+	// Will investigate more on this
 	q := s.BQReadClient.Query(
-		"SELECT * FROM `" + s.SourceConfig.Config.ConfigProjectID + "." + s.SourceConfig.Config.ConfigDatasetID + "." + tableID + "` " +
+		"SELECT * FROM `" + s.SourceConfig.Config.ProjectID + "." + s.SourceConfig.Config.DatasetID + "." + tableID + "` " +
 			"LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset))
 
 	sdk.Logger(s.Ctx).Trace().Str("q ", q.Q)
-	q.Location = s.SourceConfig.Config.ConfigLocation
+	q.Location = s.SourceConfig.Config.Location
 
 	job, err := q.Run(s.tomb.Context(s.Ctx))
 	if err != nil {
@@ -176,7 +184,7 @@ func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
 	ctx := context.Background()
 	tables := []string{}
 
-	client, err := newClient(ctx, projectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+	client, err := newClient(ctx, projectID, option.WithCredentialsFile(s.SourceConfig.Config.ServiceAccount))
 	if err != nil {
 		return []string{}, fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -201,7 +209,7 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	select {
 	case <-s.tomb.Dead():
 		return sdk.Record{}, s.tomb.Err()
-	case r := <-s.SDKResponse:
+	case r := <-s.records:
 		return r, nil
 	case <-ctx.Done():
 		return sdk.Record{}, ctx.Err()
@@ -221,13 +229,13 @@ func fetchPos(s *Source, pos sdk.Position) (position Position) {
 }
 
 func getTables(s *Source) (err error) {
-	if s.SourceConfig.Config.ConfigTableID == "" {
-		s.Tables, err = s.listTables(s.SourceConfig.Config.ConfigProjectID, s.SourceConfig.Config.ConfigDatasetID)
+	if s.SourceConfig.Config.TableID == "" {
+		s.Tables, err = s.listTables(s.SourceConfig.Config.ProjectID, s.SourceConfig.Config.DatasetID)
 		if err != nil {
 			sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
 		}
 	} else {
-		s.Tables = strings.SplitAfter(s.SourceConfig.Config.ConfigTableID, ",")
+		s.Tables = strings.SplitAfter(s.SourceConfig.Config.TableID, ",")
 	}
 	return err
 }
@@ -245,7 +253,10 @@ func (s *Source) runIterator() (err error) {
 			// haris: can we list tables in a way which doesn't require us to create a new client every polling period?
 			// in other words, why can't we list all the tables with an existing client?
 			// I'm concerned about the time overhead but also about new connections.
-			client, err := newClient(s.tomb.Context(s.Ctx), s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+
+			//Neha: your point is correct. But I experienced that any new table created after the client was created was
+			// not getting listed. I will investigate on it further though and optimise it.
+			client, err := newClient(s.tomb.Context(s.Ctx), s.SourceConfig.Config.ProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ServiceAccount))
 			if err != nil {
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
 				s.tomb.Kill(err)
@@ -274,7 +285,7 @@ func (s *Source) runIterator() (err error) {
 
 					s.tomb.Go(func() (err error) {
 						sdk.Logger(s.Ctx).Trace().Str("position", position.TableID).Msg("The table ID inside go routine ")
-						return s.ReadGoogleRow(rowInput, s.SDKResponse)
+						return s.ReadGoogleRow(rowInput, s.records)
 					})
 					rowInput <- readRowInput{tableID: tableID, position: position, wg: &wg}
 				}
@@ -298,7 +309,7 @@ func (s *Source) runIterator() (err error) {
 
 					s.tomb.Go(func() (err error) {
 						sdk.Logger(s.Ctx).Trace().Str("position", s.Position.TableID).Msg("The table ID inside go routine ")
-						return s.ReadGoogleRow(rowInput, s.SDKResponse)
+						return s.ReadGoogleRow(rowInput, s.records)
 					})
 					rowInput <- readRowInput{tableID: tableID, position: s.Position, wg: &wg}
 				}
