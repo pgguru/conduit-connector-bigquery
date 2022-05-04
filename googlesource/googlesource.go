@@ -216,7 +216,6 @@ func fetchPos(s *Source, pos sdk.Position) (position Position) {
 
 func getTables(s *Source) (err error) {
 	if s.SourceConfig.Config.ConfigTableID == "" {
-
 		s.Tables, err = s.listTables(s.SourceConfig.Config.ConfigProjectID, s.SourceConfig.Config.ConfigDatasetID)
 		if err != nil {
 			sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
@@ -227,6 +226,7 @@ func getTables(s *Source) (err error) {
 	return err
 }
 
+// split into more methods for readability
 func (s *Source) runIterator() (err error) {
 	rowInput := make(chan readRowInput)
 	for {
@@ -253,7 +253,7 @@ func (s *Source) runIterator() (err error) {
 
 			foundTable := false
 
-			// if its an already running pipeling and we just
+			// if its an already running pipeline and we just
 			// want to check for any new rows. Send the offset as
 			// last position where we left.
 			if len(s.LatestPositions.LatestPositions) > 0 {
