@@ -42,6 +42,7 @@ type readRowInput struct {
 	wg       *sync.WaitGroup
 }
 
+// haris: why does rowInput need to be a chan?
 func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
 	input := <-rowInput
 	position := input.position
@@ -95,6 +96,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 				return err
 			}
 
+			// haris: does BQ have its own way of tracking rows, i.e. its own offsets?
 			offset++
 			position := Position{
 				TableID: tableID,
@@ -138,7 +140,9 @@ func (s *Source) wrtieLatestPosition(postion Position) {
 }
 
 // runGetRow sync data for bigquery using bigquery client jobs
+// haris proposal to rename to getRowIterator, since it's not returning a single row
 func (s *Source) runGetRow(offset int, tableID string) (it *bigquery.RowIterator, err error) {
+	// haris: does BigQuery guarantee ordering?
 	q := s.BQReadClient.Query(
 		"SELECT * FROM `" + s.SourceConfig.Config.ConfigProjectID + "." + s.SourceConfig.Config.ConfigDatasetID + "." + tableID + "` " +
 			"LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset))
