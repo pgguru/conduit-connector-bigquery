@@ -14,6 +14,8 @@ for eg,
 - Pipeline is paused after syncing complete table A and table B till index 5.
 - On resuming the pipeline - Connector sync data from table B index 6 and would not sync table A's already synced rows.
 
+// haris: it would be good to describe why this isn't handled (technical limitation, simply didn't get to this)
+// maybe even add to the planned work section, so we have it in one place 
 Currently updataion/deletion is not handled by the connector.
 
 ### How to build?

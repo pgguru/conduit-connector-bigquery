@@ -241,6 +241,9 @@ func (s *Source) runIterator() (err error) {
 		case <-s.ticker.C:
 			sdk.Logger(s.Ctx).Trace().Msg("ticker started ")
 			// create new client everytime the new sync start. This make sure that new tables coming in are handled.
+			// haris: can we list tables in a way which doesn't require us to create a new client every polling period?
+			// in other words, why can't we list all the tables with an existing client?
+			// I'm concerned about the time overhead but also about new connections.
 			client, err := newClient(s.tomb.Context(s.Ctx), s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
 			if err != nil {
 				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
