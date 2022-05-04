@@ -31,15 +31,26 @@ type Source struct {
 	sdk.UnimplementedSource
 	// haris: let's check which fields do need to be exported.
 	// It feels like most do not need to be.
+	// Neha : will check this
 	Session      *bqStoragepb.ReadSession
 	BQReadClient *bigquery.Client
 	SourceConfig googlebigquery.SourceConfig
 	// haris: isn't this part of config?
+	// Neha : TableID is optional in config. If not provided we need to find them and then insert as
+	// array instead of a string. So that can be iterated easily.
 	Tables []string
 	// do we need Ctx? we have it in all the methods as a param
-	Ctx         context.Context
-	SDKResponse chan sdk.Record
+	// Neha: will check this
+	Ctx     context.Context
+	records chan sdk.Record
 	// haris: what's the difference between these two?
+	// Neha: LatestPositions is required to maintain CDC. Since we are dealing with multiple
+	// tables we need to keep the track of last position in each table which can't we done by
+	// just using Position.
+	//  eg, table1 is synced till row 5
+	//  table2 synced till row 6
+	// a new row comes in table1. Position will contain info about table2 row 6 only. But to fetch data
+	// from table one we need latestPostion
 	LatestPositions latestPositions
 	Position        Position
 	ticker          *time.Ticker
@@ -83,9 +94,10 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.Position = fetchPos(s, pos)
 
 	// haris: can we then rename SDKResponse to just `records`? SDKResponse sounds a bit generic.
-	// s.SDKResponse is a buffered channel that contains records
+	// Neha: done
+	// s.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
-	s.SDKResponse = make(chan sdk.Record, 100)
+	s.records = make(chan sdk.Record, 100)
 	s.iteratorClosed = make(chan bool, 2)
 	s.ticker = time.NewTicker(googlebigquery.PollingTime)
 	s.tomb = &tomb.Tomb{}
@@ -123,8 +135,8 @@ func (s *Source) Teardown(ctx context.Context) error {
 	// s.iteratorClosed <- true
 	// sdk.Logger(s.Ctx).Error().Msg("Teardown: closing all channels")
 
-	if s.SDKResponse != nil {
-		close(s.SDKResponse)
+	if s.records != nil {
+		close(s.records)
 	}
 	err := s.StopIterator()
 	if err != nil {

@@ -41,11 +41,11 @@ const (
 // Config represents configuration needed for S3
 type Config struct {
 	// haris: we can do without the Config prefix, since it's assumed from the struct name.
-	ConfigProjectID      string
-	ConfigDatasetID      string
-	ConfigTableID        string
-	ConfigServiceAccount string
-	ConfigLocation       string
+	ProjectID      string
+	DatasetID      string
+	TableID        string
+	ServiceAccount string
+	Location       string
 }
 
 var (
@@ -85,11 +85,11 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 	}
 
 	config := Config{
-		ConfigServiceAccount: cfg[ConfigServiceAccount],
-		ConfigProjectID:      cfg[ConfigProjectID],
-		ConfigDatasetID:      cfg[ConfigDatasetID],
-		ConfigTableID:        cfg[ConfigTableID],
-		ConfigLocation:       cfg[ConfigLocation]}
+		ServiceAccount: cfg[ConfigServiceAccount],
+		ProjectID:      cfg[ConfigProjectID],
+		DatasetID:      cfg[ConfigDatasetID],
+		TableID:        cfg[ConfigTableID],
+		Location:       cfg[ConfigLocation]}
 
 	return SourceConfig{
 		Config: config,
