@@ -36,16 +36,21 @@ const (
 
 	// ConfigLocation location of the dataset
 	ConfigLocation = "datasetLocation"
+
+	// ConfigPollingTime time after which polling should be done
+	ConfigPollingTime = "pollingTime"
 )
 
 // Config represents configuration needed for S3
 type Config struct {
 	// haris: we can do without the Config prefix, since it's assumed from the struct name.
+	// Neha: done
 	ProjectID      string
 	DatasetID      string
 	TableID        string
 	ServiceAccount string
 	Location       string
+	PollingTime    string
 }
 
 var (
@@ -53,6 +58,7 @@ var (
 	CounterLimit = 500
 	// PollingTime time after which ticker will pull data
 	// haris: it feels like we should make this configurable?
+	// done. This being default value
 	PollingTime = time.Minute * 1
 )
 
@@ -89,7 +95,8 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		ProjectID:      cfg[ConfigProjectID],
 		DatasetID:      cfg[ConfigDatasetID],
 		TableID:        cfg[ConfigTableID],
-		Location:       cfg[ConfigLocation]}
+		Location:       cfg[ConfigLocation],
+		PollingTime:    cfg[ConfigPollingTime]}
 
 	return SourceConfig{
 		Config: config,

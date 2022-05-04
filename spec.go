@@ -52,6 +52,11 @@ func Specification() sdk.Specification {
 				Required:    false,
 				Description: "Google Bigqueries table ID. Can provide `,` separated ID. Will pull whole dataset if no tableID provided.",
 			},
+			ConfigPollingTime: {
+				Default:     "1 min",
+				Required:    false,
+				Description: "time after which polling should be done",
+			},
 		},
 	}
 }

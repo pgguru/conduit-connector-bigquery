@@ -30,6 +30,7 @@ import (
 
 var (
 	// make these environmental variables with default values, or an empty value {first two} if it's required by user
+	// Neha: will do it
 	// check this for a reference https://github.com/ConduitIO/conduit-connector-s3/blob/10078746a718860570bc810f5a0040a096a447a4/source/source_integration_test.go#L611
 	serviceAccount = "<replace_me>"       // replace with path to service account with permission for the project
 	projectID      = "conduit-connectors" // replace projectID created
@@ -158,13 +159,13 @@ func TestSuccessfulGet(t *testing.T) {
 	}()
 
 	src := Source{}
-	cfg := map[string]string{} // initialize the map with all the values in one step map[string]string{key:val,...
-	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
-	cfg[googlebigquery.ConfigProjectID] = projectID
-	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = tableID
-	cfg[googlebigquery.ConfigLocation] = location
-
+	cfg := map[string]string{googlebigquery.ConfigServiceAccount: serviceAccount,
+		googlebigquery.ConfigProjectID: projectID,
+		googlebigquery.ConfigDatasetID: datasetID,
+		googlebigquery.ConfigTableID:   tableID,
+		googlebigquery.ConfigLocation:  location,
+	} // initialize the map with all the values in one step map[string]string{key:val,...
+	//Neha: Done
 	googlebigquery.PollingTime = time.Second * 1
 
 	ctx := context.Background()
@@ -216,11 +217,10 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	}()
 
 	src := Source{}
-	cfg := map[string]string{}
-	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
-	cfg[googlebigquery.ConfigProjectID] = projectID
-	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigLocation] = location
+	cfg := map[string]string{
+		googlebigquery.ConfigProjectID: projectID,
+		googlebigquery.ConfigDatasetID: datasetID,
+		googlebigquery.ConfigLocation:  location}
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
