@@ -41,7 +41,7 @@ server to validate configuration and dynamically display configuration options t
 | name |  description | required | default value |
 |------|---------|-------------|----------|
 |`serviceAccount`|Path to service account file with access to project|true| false|
-|`srcProjectID`| The Project ID on endpoint|true| false|
-|`srcDatasetID`|The dataset ID to pull data from.|true|false|
-|`srcTableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|false|
+|`projectID`| The Project ID on endpoint|true| false|
+|`datasetID`|The dataset ID to pull data from.|true|false|
+|`tableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|false|
 |`datasetLocation`|Specify location were dataset exist|true|false|

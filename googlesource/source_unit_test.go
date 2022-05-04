@@ -42,7 +42,6 @@ func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
 }
 
 func TestSuccessfulTearDown(t *testing.T) {
-
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -67,25 +66,21 @@ func TestSuccessfulTearDown(t *testing.T) {
 	err = src.Configure(ctx, cfg)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
 
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
 
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
 }
 
 func TestMultipleTables(t *testing.T) {
-
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -117,16 +112,14 @@ func TestMultipleTables(t *testing.T) {
 	if err != nil {
 		t.Errorf("error found: %v", err)
 	}
-	//time.Sleep(5 * time.Second)
+
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
 }
 
 func TestInvalidCreds(t *testing.T) {
-
 	src := Source{}
 	cfg := map[string]string{}
 	cfg[googlebigquery.ConfigServiceAccount] = "invalid"
@@ -149,7 +142,6 @@ func TestInvalidCreds(t *testing.T) {
 	}
 	time.Sleep(10 * time.Second)
 	for {
-
 		_, err := src.Read(ctx)
 		if err != nil {
 			fmt.Println("got the expected error. Err: ", err)
@@ -163,9 +155,7 @@ func TestInvalidCreds(t *testing.T) {
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
-
 }
 
 func TestNewSource(t *testing.T) {
@@ -189,7 +179,6 @@ func TestTableFetchInvalidCred(t *testing.T) {
 }
 
 func TestNextContextDone(t *testing.T) {
-
 	s := Source{}
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -202,7 +191,6 @@ func TestNextContextDone(t *testing.T) {
 }
 
 func TestInvalid(t *testing.T) {
-
 	googlebigquery.PollingTime = time.Second * 1
 	tmpClient := newClient
 	defer func() {
@@ -246,6 +234,5 @@ func TestInvalid(t *testing.T) {
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
-
 	}
 }
