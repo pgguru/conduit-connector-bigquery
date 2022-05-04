@@ -63,6 +63,7 @@ type latestPositions struct {
 	// It feels like we're repeating info.
 	// Firstly, we have a LatestPositions field in a latestPositions struct.
 	// Also, IIUC, the keys here are actually table IDs, but we already have a table ID in the Position struct.
+	// Neha: reason mentioned in above comment
 	LatestPositions map[string]Position
 	lock            sync.Mutex
 }
@@ -70,6 +71,7 @@ type latestPositions struct {
 type Position struct {
 	TableID string
 	// can we use a page token instead?
+	// Neha: Will check it
 	Offset int
 }
 
@@ -99,10 +101,20 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	//  coming from all the tables which user wants to sync.
 	s.records = make(chan sdk.Record, 100)
 	s.iteratorClosed = make(chan bool, 2)
+
+	if len(s.SourceConfig.Config.PollingTime) > 0 {
+		googlebigquery.PollingTime, err = time.ParseDuration(s.SourceConfig.Config.PollingTime + "m")
+		if err != nil {
+			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Invalid time provided. Minutes rquired.")
+			return err
+		}
+	}
 	s.ticker = time.NewTicker(googlebigquery.PollingTime)
 	s.tomb = &tomb.Tomb{}
 
 	// haris: why do we need a lock here?
+	// Neha: LatestPositions is updated by in goroutine updating it without lock creates race condition
+
 	s.LatestPositions.lock.Lock()
 	s.LatestPositions.LatestPositions = make(map[string]Position)
 	s.LatestPositions.lock.Unlock()
