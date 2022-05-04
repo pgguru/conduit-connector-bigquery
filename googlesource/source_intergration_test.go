@@ -29,17 +29,17 @@ import (
 )
 
 var (
-	serviceAccount = "<replace_me>"       // replace with path to service account with permission for the project
-	projectID      = "conduit-connectors" // replace projectID created
+	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" // replace with path to service account with permission for the project
+	projectID      = "conduit-connectors"                                             // replace projectID created
 	datasetID      = "conduit_test_dataset"
 	tableID        = "conduit_test_table"
-	tableID2       = "conduit_test_table_3"
+	tableID2       = "conduit_test_table_2"
 	location       = "US"
 )
 
-// func TestDataSetup(t *testing.T) {
-// 	dataSetup()
-// }
+func TestDataSetup(t *testing.T) {
+	dataSetup()
+}
 
 // Initial setup required - project with service account.
 func dataSetup() (err error) {

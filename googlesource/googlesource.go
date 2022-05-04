@@ -15,9 +15,7 @@
 package googlesource
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -52,7 +50,6 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 	offset := position.Offset
 
 	defer wg.Done()
-
 	for {
 		// Keep on reading till end of table
 		sdk.Logger(s.Ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
@@ -81,6 +78,8 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			}
 
 			err := it.Next(&row)
+			Schema := it.Schema
+
 			if err == iterator.Done {
 				sdk.Logger(s.Ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
 				if counter < googlebigquery.CounterLimit {
@@ -112,22 +111,19 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			// this helps in implementing incremental syncing.
 			s.wrtieLatestPosition(position)
 
-			buffer := &bytes.Buffer{}
-			if err = gob.NewEncoder(buffer).Encode(row); err != nil {
-				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error in encoding")
-				continue
+			data := make(sdk.StructuredData)
+			for i, r := range row {
+				data[Schema[i].Name] = r
 			}
-			byteSlice := buffer.Bytes()
 
 			record := sdk.Record{
 				CreatedAt: time.Now().UTC(),
-				Payload:   sdk.RawData(byteSlice),
+				Payload:   data,
 				Position:  recPosition}
 
 			responseCh <- record
 		}
 	}
-
 	return
 }
 
