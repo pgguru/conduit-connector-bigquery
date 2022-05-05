@@ -30,14 +30,18 @@ import (
 
 var (
 	// make these environmental variables with default values, or an empty value {first two} if it's required by user
-	// Neha: will do it
 	// check this for a reference https://github.com/ConduitIO/conduit-connector-s3/blob/10078746a718860570bc810f5a0040a096a447a4/source/source_integration_test.go#L611
-	serviceAccount = "<replace_me>"       // replace with path to service account with permission for the project
-	projectID      = "conduit-connectors" // replace projectID created
-	datasetID      = "conduit_test_dataset"
-	tableID        = "conduit_test_table"
-	tableID2       = "conduit_test_table_2"
-	location       = "US"
+	// Neha: DONE
+	// serviceAccount = os.Getenv("SERVICE_ACCOUNT") //eg, export SERVICE_ACCOUNT = "path_to_file"
+	// projectID      = os.Getenv("PROJECT_ID")      //eg, export PROJECT_ID ="conduit-connectors"
+
+	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" //eg, export SERVICE_ACCOUNT = "path_to_file"
+	projectID      = "conduit-connectors"                                             //eg, export PROJECT_ID ="conduit-connectors"
+
+	datasetID = "conduit_test_dataset"
+	tableID   = "conduit_test_table"
+	tableID2  = "conduit_test_table_2"
+	location  = "US"
 )
 
 // func TestDataSetup(t *testing.T) {
@@ -159,13 +163,14 @@ func TestSuccessfulGet(t *testing.T) {
 	}()
 
 	src := Source{}
-	cfg := map[string]string{googlebigquery.ConfigServiceAccount: serviceAccount,
-		googlebigquery.ConfigProjectID: projectID,
-		googlebigquery.ConfigDatasetID: datasetID,
-		googlebigquery.ConfigTableID:   tableID,
-		googlebigquery.ConfigLocation:  location,
+	cfg := map[string]string{
+		googlebigquery.ConfigServiceAccount: serviceAccount,
+		googlebigquery.ConfigProjectID:      projectID,
+		googlebigquery.ConfigDatasetID:      datasetID,
+		googlebigquery.ConfigTableID:        tableID,
+		googlebigquery.ConfigLocation:       location,
 	} // initialize the map with all the values in one step map[string]string{key:val,...
-	//Neha: Done
+	//Neha: DONE
 	googlebigquery.PollingTime = time.Second * 1
 
 	ctx := context.Background()
@@ -218,9 +223,68 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigProjectID: projectID,
-		googlebigquery.ConfigDatasetID: datasetID,
-		googlebigquery.ConfigLocation:  location}
+		googlebigquery.ConfigServiceAccount: serviceAccount,
+		googlebigquery.ConfigProjectID:      projectID,
+		googlebigquery.ConfigDatasetID:      datasetID,
+		googlebigquery.ConfigLocation:       location}
+
+	ctx := context.Background()
+	err = src.Configure(ctx, cfg)
+	if err != nil {
+		fmt.Println(err)
+		t.Errorf("some other error found: %v", err)
+	}
+
+	googlebigquery.PollingTime = time.Second * 1
+	pos := sdk.Position{}
+	err = src.Open(ctx, pos)
+	if err != nil {
+		fmt.Println("errror: ", err)
+		t.Errorf("some other error found: %v", err)
+	}
+	time.Sleep(10 * time.Second)
+
+	for {
+		record, err := src.Read(ctx)
+		if err != nil && err == sdk.ErrBackoffRetry {
+			fmt.Println("err: ", err)
+			break
+		}
+		if err != nil {
+			t.Errorf("some other error found: %v", err)
+		}
+		value := string(record.Position)
+		fmt.Println("Record found:", value)
+		value = string(record.Payload.Bytes())
+		fmt.Println(":", value)
+	}
+
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestSuccessfulOrderByName(t *testing.T) {
+	// cleanupDataSet()
+	err := dataSetup()
+	if err != nil {
+		fmt.Println("Could not create values. Err: ", err)
+		return
+	}
+	defer func() {
+		err := cleanupDataset()
+		fmt.Println("Got error while cleanup. Err: ", err)
+	}()
+
+	src := Source{}
+	cfg := map[string]string{
+		googlebigquery.ConfigServiceAccount: serviceAccount,
+		googlebigquery.ConfigProjectID:      projectID,
+		googlebigquery.ConfigDatasetID:      datasetID,
+		googlebigquery.ConfigLocation:       location,
+		googlebigquery.ConfigOrderBy:        "conduit_test_table:post_abbr",
+	}
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
