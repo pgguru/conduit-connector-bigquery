@@ -64,7 +64,7 @@ var (
 	// PollingTime time after which ticker will pull data
 	// haris: it feels like we should make this configurable?
 	// Neha: DONE. This being default value
-	PollingTime = time.Minute * 1
+	PollingTime = time.Minute * 5
 )
 
 // SourceConfig is config for source
@@ -94,7 +94,6 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 	if _, ok := cfg[ConfigLocation]; !ok {
 		return SourceConfig{}, errors.New("location can't be blank")
 	}
-
 	config := Config{
 		ServiceAccount: cfg[ConfigServiceAccount],
 		ProjectID:      cfg[ConfigProjectID],

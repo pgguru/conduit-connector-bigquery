@@ -57,6 +57,7 @@ type Source struct {
 	ticker          *time.Ticker
 	tomb            *tomb.Tomb
 	iteratorClosed  chan bool
+	snapshot        bool
 }
 
 type latestPositions struct {
@@ -106,7 +107,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	if len(s.sourceConfig.Config.PollingTime) > 0 {
 		googlebigquery.PollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime + "m")
 		if err != nil {
-			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Invalid time provided. Minutes rquired.")
+			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Invalid time provided. Minutes required.")
 			return err
 		}
 	}
