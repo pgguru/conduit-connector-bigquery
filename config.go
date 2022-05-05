@@ -47,8 +47,6 @@ const (
 
 // Config represents configuration needed for S3
 type Config struct {
-	// haris: we can do without the Config prefix, since it's assumed from the struct name.
-	// Neha: DONE
 	ProjectID      string
 	DatasetID      string
 	TableID        string
@@ -61,10 +59,7 @@ type Config struct {
 var (
 	// CounterLimit sets limit of how many rows will be fetched in each job
 	CounterLimit = 500
-	// PollingTime time after which ticker will pull data
-	// haris: it feels like we should make this configurable?
-	// Neha: DONE. This being default value
-	PollingTime = time.Minute * 5
+	PollingTime  = time.Minute * 5
 )
 
 // SourceConfig is config for source

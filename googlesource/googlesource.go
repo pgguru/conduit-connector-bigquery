@@ -140,8 +140,6 @@ func (s *Source) wrtieLatestPosition(postion Position) {
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
-// haris proposal to rename to getRowIterator, since it's not returning a single row
-// Neha: DONE
 func (s *Source) getRowIterator(offset int, tableID string) (it *bigquery.RowIterator, err error) {
 	// haris: does BigQuery guarantee ordering?
 	// Neha: DONE. it does not guarantee ordering and so have added a config where user can provide the column name which
@@ -259,10 +257,6 @@ func (s *Source) runIterator() (err error) {
 		case <-s.ticker.C:
 			sdk.Logger(s.ctx).Trace().Msg("ticker started ")
 			// create new client everytime the new sync start. This make sure that new tables coming in are handled.
-			// haris: can we list tables in a way which doesn't require us to create a new client every polling period?
-			// in other words, why can't we list all the tables with an existing client?
-			// I'm concerned about the time overhead but also about new connections.
-			//Neha: DONE
 
 			if err = getTables(s); err != nil {
 				sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
