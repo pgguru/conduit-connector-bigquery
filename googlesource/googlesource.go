@@ -160,7 +160,7 @@ func (s *Source) getRowIterator(offset int, tableID string) (it *bigquery.RowIte
 
 	job, err := q.Run(s.tomb.Context(s.ctx))
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running the job")
 		return it, err
 	}
 
