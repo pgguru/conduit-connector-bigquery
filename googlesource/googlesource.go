@@ -145,7 +145,7 @@ func (s *Source) wrtieLatestPosition(postion Position) {
 func (s *Source) getRowIterator(offset int, tableID string) (it *bigquery.RowIterator, err error) {
 	// haris: does BigQuery guarantee ordering?
 	// Neha: DONE. it does not guarantee ordering and so have added a config where user can provide the column name which
-	// would be used as orderBy value
+	// would be used as orderBy value. Orderby is not mandatory though
 
 	query := "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
 		" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset)
@@ -220,7 +220,8 @@ func fetchPos(s *Source, pos sdk.Position) (position Position) {
 	position = Position{TableID: "", Offset: 0}
 	err := json.Unmarshal(pos, &position)
 	if err != nil {
-		sdk.Logger(s.ctx).Info().Str("err", err.Error()).Msg("Could not get position. Will start with offset 0")
+		sdk.Logger(s.ctx).Info().Msg("Could not get position. Will start with offset 0")
+		s.snapshot = true
 		position = Position{TableID: "", Offset: 0}
 	}
 	return position
@@ -239,9 +240,18 @@ func getTables(s *Source) (err error) {
 }
 
 // split into more methods for readability
-// Neha: will work on this
+// Neha: DONE
 func (s *Source) runIterator() (err error) {
 	rowInput := make(chan readRowInput)
+
+	if err = getTables(s); err != nil {
+		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
+		return err
+	}
+	if len(s.latestPositions.LatestPositions) == 0 {
+		runSnapshotIterator(s, rowInput)
+	}
+
 	for {
 		select {
 		case <-s.tomb.Dying():
@@ -252,7 +262,6 @@ func (s *Source) runIterator() (err error) {
 			// haris: can we list tables in a way which doesn't require us to create a new client every polling period?
 			// in other words, why can't we list all the tables with an existing client?
 			// I'm concerned about the time overhead but also about new connections.
-
 			//Neha: DONE
 
 			if err = getTables(s); err != nil {
@@ -260,51 +269,59 @@ func (s *Source) runIterator() (err error) {
 				return err
 			}
 
-			foundTable := false
-
 			// if its an already running pipeline and we just
 			// want to check for any new rows. Send the offset as
 			// last position where we left.
 			if len(s.latestPositions.LatestPositions) > 0 {
-				// wait group make sure that we start new iteration only
-				//  after the first iteration is completely done.
-				var wg sync.WaitGroup
-				for _, tableID := range s.tables {
-					wg.Add(1)
-					position := s.latestPositions.LatestPositions[tableID]
-
-					s.tomb.Go(func() (err error) {
-						sdk.Logger(s.ctx).Trace().Str("position", position.TableID).Msg("The table ID inside go routine ")
-						return s.ReadGoogleRow(rowInput, s.records)
-					})
-					rowInput <- readRowInput{tableID: tableID, position: position, wg: &wg}
-				}
-				wg.Wait()
+				runCDCIterator(s, rowInput)
 			} else {
-				// if the pipeline has been newly started and it was earlier synced.
-				// Then we want to skip all the tables which are already synced and
-				// pull only after specified position
-
-				var wg sync.WaitGroup
-
-				for _, tableID := range s.tables {
-					wg.Add(1)
-					if !foundTable && s.position.TableID != "" {
-						if s.position.TableID != tableID {
-							continue
-						} else {
-							foundTable = true
-						}
-					}
-
-					s.tomb.Go(func() (err error) {
-						sdk.Logger(s.ctx).Trace().Str("position", s.position.TableID).Msg("The table ID inside go routine ")
-						return s.ReadGoogleRow(rowInput, s.records)
-					})
-					rowInput <- readRowInput{tableID: tableID, position: s.position, wg: &wg}
-				}
-				wg.Wait()
+				runSnapshotIterator(s, rowInput)
 			}
 		}
 	}
+}
+
+func runSnapshotIterator(s *Source, rowInput chan readRowInput) {
+	foundTable := false
+
+	// if the pipeline has been newly started and it was earlier synced.
+	// Then we want to skip all the tables which are already synced and
+	// pull only after specified position
+
+	var wg sync.WaitGroup
+
+	for _, tableID := range s.tables {
+		wg.Add(1)
+		if !foundTable && s.position.TableID != "" {
+			if s.position.TableID != tableID {
+				continue
+			} else {
+				foundTable = true
+			}
+		}
+
+		s.tomb.Go(func() (err error) {
+			sdk.Logger(s.ctx).Trace().Str("position", s.position.TableID).Msg("The table ID inside go routine ")
+			return s.ReadGoogleRow(rowInput, s.records)
+		})
+		rowInput <- readRowInput{tableID: tableID, position: s.position, wg: &wg}
+	}
+	wg.Wait()
+}
+
+func runCDCIterator(s *Source, rowInput chan readRowInput) {
+	// wait group make sure that we start new iteration only
+	//  after the first iteration is completely done.
+	var wg sync.WaitGroup
+	for _, tableID := range s.tables {
+		wg.Add(1)
+		position := s.latestPositions.LatestPositions[tableID]
+
+		s.tomb.Go(func() (err error) {
+			sdk.Logger(s.ctx).Trace().Str("position", position.TableID).Msg("The table ID inside go routine ")
+			return s.ReadGoogleRow(rowInput, s.records)
+		})
+		rowInput <- readRowInput{tableID: tableID, position: position, wg: &wg}
+	}
+	wg.Wait()
 }
