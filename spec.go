@@ -27,7 +27,7 @@ func Specification() sdk.Specification {
 		Version:     "v0.1.0",
 		Author:      "Neha Gupta",
 		SourceParams: map[string]sdk.Parameter{
-			ConfigServiceAccount: { // TODO: can it be changed
+			ConfigServiceAccount: {
 				Default:     "",
 				Required:    true,
 				Description: "Path to service account key with data pulling access.", // We can also take it as value if required
@@ -53,7 +53,7 @@ func Specification() sdk.Specification {
 				Description: "Google Bigqueries table ID. Can provide `,` separated ID. Will pull whole dataset if no tableID provided.",
 			},
 			ConfigPollingTime: {
-				Default:     "1",
+				Default:     "5",
 				Required:    false,
 				Description: "Minutes after which polling should be done. Number of minutes accepted. eg, 60",
 			},

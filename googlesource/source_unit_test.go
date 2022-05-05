@@ -256,5 +256,4 @@ func TestInvalidOrderByName(t *testing.T) {
 		fmt.Println("expected error. got null")
 		t.Errorf("some other error found: %v", err)
 	}
-
 }
