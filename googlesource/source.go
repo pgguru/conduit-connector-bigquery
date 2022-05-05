@@ -30,9 +30,6 @@ import (
 
 type Source struct {
 	sdk.UnimplementedSource
-	// haris: let's check which fields do need to be exported.
-	// It feels like most do not need to be.
-	// Neha : DONE
 	bqReadClient *bigquery.Client
 	sourceConfig googlebigquery.SourceConfig
 	// haris: isn't this part of config?
