@@ -57,6 +57,7 @@ type Source struct {
 	ticker          *time.Ticker
 	tomb            *tomb.Tomb
 	iteratorClosed  chan bool
+	snapshot        bool
 }
 
 type latestPositions struct {
