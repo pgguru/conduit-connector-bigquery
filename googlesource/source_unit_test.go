@@ -207,7 +207,7 @@ func TestInvalid(t *testing.T) {
 		t.Errorf("expected no error, got %v", err)
 	}
 
-	pos, err := json.Marshal(Position{TableID: "conduit_test_table", Offset: 46})
+	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: 46})
 	if err != nil {
 		fmt.Println(err)
 	}
