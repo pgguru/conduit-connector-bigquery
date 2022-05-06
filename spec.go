@@ -55,7 +55,7 @@ func Specification() sdk.Specification {
 			ConfigPollingTime: {
 				Default:     "5",
 				Required:    false,
-				Description: "Minutes after which polling should be done. Number of minutes accepted. eg, 60",
+				Description: "polling period for the CDC mode, formatted as a time.Duration string.",
 			},
 			ConfigOrderBy: {
 				Default:  "",

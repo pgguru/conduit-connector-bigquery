@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -33,17 +32,17 @@ var (
 	// make these environmental variables with default values, or an empty value {first two} if it's required by user
 	// check this for a reference https://github.com/ConduitIO/conduit-connector-s3/blob/10078746a718860570bc810f5a0040a096a447a4/source/source_integration_test.go#L611
 	// Neha: DONE
-	serviceAccount = os.Getenv("SERVICE_ACCOUNT") // eg, export SERVICE_ACCOUNT = "path_to_file"
-	projectID      = os.Getenv("PROJECT_ID")      // eg, export PROJECT_ID ="conduit-connectors"
+	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" // eg, export SERVICE_ACCOUNT = "path_to_file"
+	projectID      = "conduit-connectors"                                             // eg, export PROJECT_ID ="conduit-connectors"
 	datasetID      = "conduit_test_dataset"
 	tableID        = "conduit_test_table"
 	tableID2       = "conduit_test_table_2"
 	location       = "US"
 )
 
-// func TestDataSetup(t *testing.T) {
-// 	dataSetup()
-// }
+func TestDataSetup(t *testing.T) {
+	dataSetup()
+}
 
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
@@ -176,7 +175,7 @@ func TestSuccessfulGet(t *testing.T) {
 		fmt.Println(err)
 	}
 
-	pos, err := json.Marshal(Position{TableID: "conduit_test_table", Offset: 46})
+	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: 46})
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -223,6 +222,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		googlebigquery.ConfigServiceAccount: serviceAccount,
 		googlebigquery.ConfigProjectID:      projectID,
 		googlebigquery.ConfigDatasetID:      datasetID,
+		googlebigquery.ConfigTableID:        fmt.Sprintf("%s,%s", tableID, tableID2),
 		googlebigquery.ConfigLocation:       location}
 
 	ctx := context.Background()

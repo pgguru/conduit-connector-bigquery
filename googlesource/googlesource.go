@@ -15,7 +15,9 @@
 package googlesource
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -34,22 +36,23 @@ var (
 )
 
 type readRowInput struct {
-	tableID  string
-	position Position
-	wg       *sync.WaitGroup
+	tableID string
+	offset  int
+	wg      *sync.WaitGroup
 }
 
 // haris: why does rowInput need to be a chan?
 // Neha: the function is getting called inside a goroutine we get wrong value (everytime the last possible values) and
 // func param will change for each function call
 func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
+	sdk.Logger(s.ctx).Trace().Msg("Inside read google row")
+
 	input := <-rowInput
-	position := input.position
+	offset := input.offset
 	tableID := input.tableID
 	wg := input.wg
 
 	lastRow := false
-	offset := position.Offset
 
 	defer wg.Done()
 	for {
@@ -101,21 +104,23 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			// Users generally have some keys to do so. And we are working on meta-data of
 			// table and not actual data.
 			offset++
-			position := Position{
+			key := Key{
 				TableID: tableID,
 				Offset:  offset,
 			}
+			buffer := &bytes.Buffer{}
+			gob.NewEncoder(buffer).Encode(key)
+			byteKey := buffer.Bytes()
 
 			counter++
-			recPosition, err := json.Marshal(&position)
+
+			// keep the track of last rows fetched for each table.
+			// this helps in implementing incremental syncing.
+			recPosition, err := s.writeLatestPosition(key.TableID, key.Offset)
 			if err != nil {
 				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
 			}
-
-			// keep the track of last rows fetched for each table.
-			// this helps in implementing incremental syncing.
-			s.wrtieLatestPosition(position)
 
 			data := make(sdk.StructuredData)
 			for i, r := range row {
@@ -125,6 +130,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			record := sdk.Record{
 				CreatedAt: time.Now().UTC(),
 				Payload:   data,
+				Key:       sdk.RawData(byteKey),
 				Position:  recPosition}
 
 			responseCh <- record
@@ -133,10 +139,19 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 	return
 }
 
-func (s *Source) wrtieLatestPosition(postion Position) {
+// getLatestPos prevents race condition happening while using map inside goroutine
+func (s *Source) getLatestPos() (latestPositions map[string]int) {
 	s.latestPositions.lock.Lock()
-	s.latestPositions.LatestPositions[postion.TableID] = postion
-	s.latestPositions.lock.Unlock()
+	defer s.latestPositions.lock.Unlock()
+	return s.latestPositions.LatestPositions
+}
+
+// writeLatestPosition prevents race condition happening while using map inside goroutine
+func (s *Source) writeLatestPosition(tableID string, offset int) (recPosition []byte, err error) {
+	s.latestPositions.lock.Lock()
+	defer s.latestPositions.lock.Unlock()
+	s.latestPositions.LatestPositions[tableID] = offset
+	return json.Marshal(&s.latestPositions.LatestPositions)
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
@@ -214,15 +229,16 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	}
 }
 
-func fetchPos(s *Source, pos sdk.Position) (position Position) {
-	position = Position{TableID: "", Offset: 0}
-	err := json.Unmarshal(pos, &position)
+func fetchPos(s *Source, pos sdk.Position) {
+	s.latestPositions = latestPositions{LatestPositions: make(map[string]int)}
+	s.latestPositions.lock = new(sync.Mutex)
+	s.latestPositions.lock.Lock()
+
+	err := json.Unmarshal(pos, &s.latestPositions.LatestPositions)
 	if err != nil {
 		sdk.Logger(s.ctx).Info().Msg("Could not get position. Will start with offset 0")
-		s.snapshot = true
-		position = Position{TableID: "", Offset: 0}
 	}
-	return position
+	s.latestPositions.lock.Unlock()
 }
 
 func getTables(s *Source) (err error) {
@@ -232,7 +248,7 @@ func getTables(s *Source) (err error) {
 			sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
 		}
 	} else {
-		s.tables = strings.SplitAfter(s.sourceConfig.Config.TableID, ",")
+		s.tables = strings.Split(s.sourceConfig.Config.TableID, ",")
 	}
 	return err
 }
@@ -246,61 +262,34 @@ func (s *Source) runIterator() (err error) {
 		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
 		return err
 	}
-	if len(s.latestPositions.LatestPositions) == 0 {
-		runSnapshotIterator(s, rowInput)
-	}
 
+	var wg sync.WaitGroup
+	// Snapshot sync. Start were we left last
+	for _, tableID := range s.tables {
+		wg.Add(1)
+
+		s.tomb.Go(func() (err error) {
+			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getLatestPos()[tableID]))
+			return s.ReadGoogleRow(rowInput, s.records)
+		})
+		latestPos := s.getLatestPos()
+		rowInput <- readRowInput{tableID: tableID, offset: latestPos[tableID], wg: &wg}
+	}
+	wg.Wait()
 	for {
 		select {
 		case <-s.tomb.Dying():
 			return s.tomb.Err()
 		case <-s.ticker.C:
 			sdk.Logger(s.ctx).Trace().Msg("ticker started ")
-			// create new client everytime the new sync start. This make sure that new tables coming in are handled.
 
 			if err = getTables(s); err != nil {
 				sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
 				return err
 			}
-
-			// if its an already running pipeline and we just
-			// want to check for any new rows. Send the offset as
-			// last position where we left.
-			if len(s.latestPositions.LatestPositions) > 0 {
-				runCDCIterator(s, rowInput)
-			} else {
-				runSnapshotIterator(s, rowInput)
-			}
+			runCDCIterator(s, rowInput)
 		}
 	}
-}
-
-func runSnapshotIterator(s *Source, rowInput chan readRowInput) {
-	foundTable := false
-
-	// if the pipeline has been newly started and it was earlier synced.
-	// Then we want to skip all the tables which are already synced and
-	// pull only after specified position
-
-	var wg sync.WaitGroup
-
-	for _, tableID := range s.tables {
-		wg.Add(1)
-		if !foundTable && s.position.TableID != "" {
-			if s.position.TableID != tableID {
-				continue
-			} else {
-				foundTable = true
-			}
-		}
-
-		s.tomb.Go(func() (err error) {
-			sdk.Logger(s.ctx).Trace().Str("position", s.position.TableID).Msg("The table ID inside go routine ")
-			return s.ReadGoogleRow(rowInput, s.records)
-		})
-		rowInput <- readRowInput{tableID: tableID, position: s.position, wg: &wg}
-	}
-	wg.Wait()
 }
 
 func runCDCIterator(s *Source, rowInput chan readRowInput) {
@@ -309,13 +298,13 @@ func runCDCIterator(s *Source, rowInput chan readRowInput) {
 	var wg sync.WaitGroup
 	for _, tableID := range s.tables {
 		wg.Add(1)
-		position := s.latestPositions.LatestPositions[tableID]
+		position := s.getLatestPos()[tableID]
 
 		s.tomb.Go(func() (err error) {
-			sdk.Logger(s.ctx).Trace().Str("position", position.TableID).Msg("The table ID inside go routine ")
+			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getLatestPos()[tableID]))
 			return s.ReadGoogleRow(rowInput, s.records)
 		})
-		rowInput <- readRowInput{tableID: tableID, position: position, wg: &wg}
+		rowInput <- readRowInput{tableID: tableID, offset: position, wg: &wg}
 	}
 	wg.Wait()
 }
