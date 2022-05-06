@@ -119,7 +119,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 			// keep the track of last rows fetched for each table.
 			// this helps in implementing incremental syncing.
-			recPosition, err := s.writeLatestPosition(key.TableID, key.Offset)
+			recPosition, err := s.writePosition(key.TableID, key.Offset)
 			if err != nil {
 				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
@@ -142,19 +142,19 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 	return
 }
 
-// getLatestPos prevents race condition happening while using map inside goroutine
-func (s *Source) getLatestPos() (latestPositions map[string]int) {
-	s.latestPositions.lock.Lock()
-	defer s.latestPositions.lock.Unlock()
-	return s.latestPositions.LatestPositions
+// getPosition prevents race condition happening while using map inside goroutine
+func (s *Source) getPosition() (positions map[string]int) {
+	s.positions.lock.Lock()
+	defer s.positions.lock.Unlock()
+	return s.positions.positions
 }
 
-// writeLatestPosition prevents race condition happening while using map inside goroutine
-func (s *Source) writeLatestPosition(tableID string, offset int) (recPosition []byte, err error) {
-	s.latestPositions.lock.Lock()
-	defer s.latestPositions.lock.Unlock()
-	s.latestPositions.LatestPositions[tableID] = offset
-	return json.Marshal(&s.latestPositions.LatestPositions)
+// writePosition prevents race condition happening while using map inside goroutine
+func (s *Source) writePosition(tableID string, offset int) (recPosition []byte, err error) {
+	s.positions.lock.Lock()
+	defer s.positions.lock.Unlock()
+	s.positions.positions[tableID] = offset
+	return json.Marshal(&s.positions.positions)
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
@@ -233,15 +233,15 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 }
 
 func fetchPos(s *Source, pos sdk.Position) {
-	s.latestPositions = latestPositions{LatestPositions: make(map[string]int)}
-	s.latestPositions.lock = new(sync.Mutex)
-	s.latestPositions.lock.Lock()
+	s.positions = positions{positions: make(map[string]int)}
+	s.positions.lock = new(sync.Mutex)
+	s.positions.lock.Lock()
 
-	err := json.Unmarshal(pos, &s.latestPositions.LatestPositions)
+	err := json.Unmarshal(pos, &s.positions.positions)
 	if err != nil {
 		sdk.Logger(s.ctx).Info().Msg("Could not get position. Will start with offset 0")
 	}
-	s.latestPositions.lock.Unlock()
+	s.positions.lock.Unlock()
 }
 
 func getTables(s *Source) (err error) {
@@ -272,11 +272,11 @@ func (s *Source) runIterator() (err error) {
 		wg.Add(1)
 
 		s.tomb.Go(func() (err error) {
-			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getLatestPos()[tableID]))
+			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getPosition()[tableID]))
 			return s.ReadGoogleRow(rowInput, s.records)
 		})
-		latestPos := s.getLatestPos()
-		rowInput <- readRowInput{tableID: tableID, offset: latestPos[tableID], wg: &wg}
+		position := s.getPosition()
+		rowInput <- readRowInput{tableID: tableID, offset: position[tableID], wg: &wg}
 	}
 	wg.Wait()
 	for {
@@ -301,10 +301,10 @@ func runCDCIterator(s *Source, rowInput chan readRowInput) {
 	var wg sync.WaitGroup
 	for _, tableID := range s.tables {
 		wg.Add(1)
-		position := s.getLatestPos()[tableID]
+		position := s.getPosition()[tableID]
 
 		s.tomb.Go(func() (err error) {
-			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getLatestPos()[tableID]))
+			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getPosition()[tableID]))
 			return s.ReadGoogleRow(rowInput, s.records)
 		})
 		rowInput <- readRowInput{tableID: tableID, offset: position, wg: &wg}
