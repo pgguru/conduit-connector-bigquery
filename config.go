@@ -89,6 +89,7 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 	if _, ok := cfg[ConfigLocation]; !ok {
 		return SourceConfig{}, errors.New("location can't be blank")
 	}
+
 	config := Config{
 		ServiceAccount: cfg[ConfigServiceAccount],
 		ProjectID:      cfg[ConfigProjectID],
