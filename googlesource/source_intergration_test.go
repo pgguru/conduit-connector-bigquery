@@ -176,7 +176,7 @@ func TestSuccessfulGet(t *testing.T) {
 		fmt.Println(err)
 	}
 
-	pos, err := json.Marshal(Position{TableID: "conduit_test_table", Offset: 46})
+	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: 46})
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -223,6 +223,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		googlebigquery.ConfigServiceAccount: serviceAccount,
 		googlebigquery.ConfigProjectID:      projectID,
 		googlebigquery.ConfigDatasetID:      datasetID,
+		googlebigquery.ConfigTableID:        fmt.Sprintf("%s,%s", tableID, tableID2),
 		googlebigquery.ConfigLocation:       location}
 
 	ctx := context.Background()
