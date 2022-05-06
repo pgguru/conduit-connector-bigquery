@@ -42,21 +42,21 @@ type Source struct {
 	ctx     context.Context
 	records chan sdk.Record
 	// haris: what's the difference between these two?
-	// Neha: DONE. Kept only LatestPositions which is sent as position to the record
-	latestPositions latestPositions
-	ticker          *time.Ticker
-	tomb            *tomb.Tomb
-	iteratorClosed  chan bool
+	// Neha: DONE.
+	positions      positions
+	ticker         *time.Ticker
+	tomb           *tomb.Tomb
+	iteratorClosed chan bool
 }
 
-type latestPositions struct {
+type positions struct {
 	// haris: what do the keys represent?
 	// It feels like we're repeating info.
 	// Firstly, we have a LatestPositions field in a latestPositions struct.
 	// Also, IIUC, the keys here are actually table IDs, but we already have a table ID in the Position struct.
 	// Neha: DONE updated it to position
-	LatestPositions map[string]int
-	lock            *sync.Mutex
+	positions map[string]int
+	lock      *sync.Mutex
 }
 
 type Key struct {
