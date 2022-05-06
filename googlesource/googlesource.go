@@ -109,7 +109,10 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 				Offset:  offset,
 			}
 			buffer := &bytes.Buffer{}
-			gob.NewEncoder(buffer).Encode(key)
+			if err := gob.NewEncoder(buffer).Encode(key); err != nil {
+				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
+				continue
+			}
 			byteKey := buffer.Bytes()
 
 			counter++
