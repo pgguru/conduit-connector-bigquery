@@ -30,9 +30,6 @@ import (
 )
 
 var (
-	// make these environmental variables with default values, or an empty value {first two} if it's required by user
-	// check this for a reference https://github.com/ConduitIO/conduit-connector-s3/blob/10078746a718860570bc810f5a0040a096a447a4/source/source_integration_test.go#L611
-	// Neha: DONE
 	serviceAccount = os.Getenv("SERVICE_ACCOUNT") // eg, export SERVICE_ACCOUNT = "path_to_file"
 	projectID      = os.Getenv("PROJECT_ID")      // eg, export PROJECT_ID ="conduit-connectors"
 	datasetID      = "conduit_test_dataset"
@@ -40,10 +37,6 @@ var (
 	tableID2       = "conduit_test_table_2"
 	location       = "US"
 )
-
-// func TestDataSetup(t *testing.T) {
-// 	dataSetup()
-// }
 
 // Initial setup required - project with service account.
 func dataSetup() (err error) {
@@ -166,8 +159,7 @@ func TestSuccessfulGet(t *testing.T) {
 		googlebigquery.ConfigDatasetID:      datasetID,
 		googlebigquery.ConfigTableID:        tableID,
 		googlebigquery.ConfigLocation:       location,
-	} // initialize the map with all the values in one step map[string]string{key:val,...
-	//Neha: DONE
+	}
 	googlebigquery.PollingTime = time.Second * 1
 
 	ctx := context.Background()

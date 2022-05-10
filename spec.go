@@ -60,7 +60,8 @@ func Specification() sdk.Specification {
 			ConfigOrderBy: {
 				Default:  "",
 				Required: false,
-				Description: `column name for each table by which Bigquery data will be ordered , if not provided no order will be used for that table. \n eg value,
+				Description: `Column name which provides visibility about newer rows. For eg, updated_at column which stores when the row was last updated\n
+				primary key with incremental value say id of type int or float.  \n eg value,
 				 tableid:columnName,tableid:columnName,...`,
 			},
 		},

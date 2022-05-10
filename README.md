@@ -6,7 +6,7 @@ A source connector pulls data from bigquery and pushes it to downstream resource
 
 ### Implementation
 The connector pulls data from bigquery for a dataset or selected tables of users choice. The connector syncs incrementally this means
-it keeps on looking for new insertion happening every minure in any of the table the data is pulled for and syncs it. 
+it keeps on looking for new insertion/updation happening every time interval user specified in any of the table the data is pulled for and syncs it. 
 If the conduit stops or pauses midway the connector will make sure to pull the data which was not pull earlier. 
 
 for eg,
@@ -41,6 +41,6 @@ server to validate configuration and dynamically display configuration options t
 |`tableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|false|
 |`datasetLocation`|Specify location were dataset exist|true|false|
 |`pollingTime`|Specify time foramtted as a time.Duration string, after which polling of data should be done. For eg, "2s", "500ms"|false|true|
-|`orderby`|Specify the column name by which the data should be ordered. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:name' where created_by and name are column names. Table with no value will be pulled without any ordering.|true|false|
+|`incrementingColumnName`|Specify the column name which provide visibility about newer row or newer updates. It can be either `updated_at` timestamp which specifies when the table was last updated. It can be a `ID` of type int or float whose value increases with every new record coming in. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering.|true|false|
 
  

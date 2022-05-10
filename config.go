@@ -42,7 +42,7 @@ const (
 	ConfigPollingTime = "pollingTime"
 
 	// ConfigOrderBy lets user decide
-	ConfigOrderBy = "orderby"
+	ConfigOrderBy = "incrementingColumnName"
 )
 
 // Config represents configuration needed for S3
