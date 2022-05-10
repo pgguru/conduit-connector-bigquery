@@ -256,8 +256,6 @@ func getTables(s *Source) (err error) {
 	return err
 }
 
-// split into more methods for readability
-// Neha: DONE
 func (s *Source) runIterator() (err error) {
 	rowInput := make(chan readRowInput)
 

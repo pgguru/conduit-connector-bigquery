@@ -14,17 +14,6 @@ for eg,
 - Pipeline is paused after syncing complete table A and table B till index 5.
 - On resuming the pipeline - Connector sync data from table B index 6 and would not sync table A's already synced rows.
 
-// haris: it would be good to describe why this isn't handled (technical limitation, simply didn't get to this)
-// maybe even add to the planned work section, so we have it in one place 
-// Neha: The endpoint does not provide any direct way of pulling the updates. I did try the following ways-
-// 1. Use transaction/jobs to check the changes done - This works in case of queries but fails if it was a `load job`
-// 2. Went through postgres connector, they use data replication feature to get the changes. But google being a fault tolerant warehouse does
-//    not provide any such feature of replication
-// 3. Different endpoint generally provide the feature of getting the delta. Bigquery does not provide any such feature because Bigquery is 
-//    similar to any sql database where to pull the data for a interval we need to add some column of timestamp and then use it for getting updated
-//    data. But since we are working on the metadata of table and not table its not possible to get the delta data.
-Currently updataion/deletion is not handled by the connector.
-
 ### How to build?
 Run `make build` to build the connector.
 
