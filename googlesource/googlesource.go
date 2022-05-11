@@ -36,9 +36,10 @@ var (
 )
 
 type readRowInput struct {
-	tableID string
-	offset  int
-	wg      *sync.WaitGroup
+	tableID   string
+	offset    string
+	positions map[string]string
+	wg        *sync.WaitGroup
 }
 
 // haris: why does rowInput need to be a chan?
@@ -46,12 +47,21 @@ type readRowInput struct {
 // func param will change for each function call
 func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
 	sdk.Logger(s.ctx).Trace().Msg("Inside read google row")
+	var userDefinedOffset bool
+	var firstSync bool
 
 	input := <-rowInput
 	offset := input.offset
 	tableID := input.tableID
 	wg := input.wg
 
+	if _, ok := input.positions[tableID]; !ok {
+		firstSync = true
+	}
+
+	if _, ok := s.sourceConfig.Config.IncrementColName[tableID]; ok {
+		userDefinedOffset = true
+	}
 	lastRow := false
 
 	defer wg.Done()
@@ -65,7 +75,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 		counter := 0
 		// iterator
-		it, err := s.getRowIterator(offset, tableID)
+		it, err := s.getRowIterator(offset, tableID, firstSync)
 		if err != nil {
 			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 			return err
@@ -99,14 +109,51 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 				return err
 			}
 
-			// haris: does BQ have its own way of tracking rows, i.e. its own offsets?
-			// Neha: Could not find any. Tables metadata does not provide any such info.
-			// Users generally have some keys to do so. And we are working on meta-data of
-			// table and not actual data.
-			offset++
-			key := Key{
-				TableID: tableID,
-				Offset:  offset,
+			data := make(sdk.StructuredData)
+			var key Key
+
+			for i, r := range row {
+				// handle dates
+				if Schema[i].Type == bigquery.TimestampFieldType {
+					dateR := fmt.Sprintf("%v", r)
+					dateLocal, err := time.Parse("2006-01-02 15:04:05.999999 -0700 MST", dateR)
+					if err != nil {
+						sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while converting to time format")
+						return err
+					}
+					r = dateLocal.Format("2006-01-02 15:04:05.999999 MST")
+				}
+				data[Schema[i].Name] = r
+
+				// if we have found the user provided incremental key that would be used as offset
+				if userDefinedOffset {
+					if Schema[i].Name == s.sourceConfig.Config.IncrementColName[tableID] {
+						offset = fmt.Sprint(data[Schema[i].Name])
+						offset = getType(Schema[i].Type, offset)
+						key = Key{
+							TableID: tableID,
+							Offset:  offset,
+						}
+					}
+				}
+			}
+
+			if !userDefinedOffset {
+				// if user doesn't provide any incremental key we manually create offsets to pull data
+				if firstSync {
+					offset = "0"
+				}
+				offsetInt, err := strconv.Atoi(offset)
+				if err != nil {
+					sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while converting")
+					continue
+				}
+				offsetInt++
+				key = Key{
+					TableID: tableID,
+					Offset:  fmt.Sprintf("%d", offsetInt),
+				}
+				offset = fmt.Sprintf("%d", offsetInt)
 			}
 			buffer := &bytes.Buffer{}
 			if err := gob.NewEncoder(buffer).Encode(key); err != nil {
@@ -116,6 +163,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			byteKey := buffer.Bytes()
 
 			counter++
+			firstSync = false
 
 			// keep the track of last rows fetched for each table.
 			// this helps in implementing incremental syncing.
@@ -123,11 +171,6 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			if err != nil {
 				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
-			}
-
-			data := make(sdk.StructuredData)
-			for i, r := range row {
-				data[Schema[i].Name] = r
 			}
 
 			record := sdk.Record{
@@ -140,17 +183,37 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 		}
 	}
 	return
+
+}
+
+func getType(fieldType bigquery.FieldType, offset string) string {
+
+	switch fieldType {
+	case bigquery.IntegerFieldType:
+		return offset
+	case bigquery.FloatFieldType:
+		return offset
+	case bigquery.NumericFieldType:
+		return offset
+	case bigquery.BigNumericFieldType:
+		return offset
+	case bigquery.TimeFieldType:
+		return fmt.Sprintf("'%s'", offset)
+
+	default:
+		return fmt.Sprintf("'%s'", offset)
+	}
 }
 
 // getPosition prevents race condition happening while using map inside goroutine
-func (s *Source) getPosition() (positions map[string]int) {
+func (s *Source) getPosition() (positions map[string]string) {
 	s.positions.lock.Lock()
 	defer s.positions.lock.Unlock()
 	return s.positions.positions
 }
 
 // writePosition prevents race condition happening while using map inside goroutine
-func (s *Source) writePosition(tableID string, offset int) (recPosition []byte, err error) {
+func (s *Source) writePosition(tableID string, offset string) (recPosition []byte, err error) {
 	s.positions.lock.Lock()
 	defer s.positions.lock.Unlock()
 	s.positions.positions[tableID] = offset
@@ -158,17 +221,29 @@ func (s *Source) writePosition(tableID string, offset int) (recPosition []byte, 
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
-func (s *Source) getRowIterator(offset int, tableID string) (it *bigquery.RowIterator, err error) {
-	// haris: does BigQuery guarantee ordering?
-	// Neha: DONE. it does not guarantee ordering and so have added a config where user can provide the column name which
-	// would be used as orderBy value. Orderby is not mandatory though
+func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (it *bigquery.RowIterator, err error) {
+	// check for config `IncrementColName`. User can provide the column name which
+	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
 
-	query := "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
-		" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset)
+	var query string
+	if columnName, ok := s.sourceConfig.Config.IncrementColName[tableID]; ok {
+		if firstSync {
+			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
+				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
 
-	if orderby, ok := s.sourceConfig.Config.Orderby[tableID]; ok {
+		} else {
+			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` WHERE " + columnName +
+				" > " + offset + " ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
+		}
+	} else {
+		// add default value if none specified
+		if len(offset) <= 0 {
+			offset = "0"
+		}
+		// if no incremental value provided using default offset which is created by incrementing a counter each time a row is sync.
 		query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
-			"ORDER BY " + orderby + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset)
+			" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + offset
+
 	}
 	q := s.bqReadClient.Query(query)
 	sdk.Logger(s.ctx).Trace().Str("q ", q.Q)
@@ -233,7 +308,7 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 }
 
 func fetchPos(s *Source, pos sdk.Position) {
-	s.positions = positions{positions: make(map[string]int)}
+	s.positions = positions{positions: make(map[string]string)}
 	s.positions.lock = new(sync.Mutex)
 	s.positions.lock.Lock()
 
@@ -274,7 +349,7 @@ func (s *Source) runIterator() (err error) {
 			return s.ReadGoogleRow(rowInput, s.records)
 		})
 		position := s.getPosition()
-		rowInput <- readRowInput{tableID: tableID, offset: position[tableID], wg: &wg}
+		rowInput <- readRowInput{tableID: tableID, offset: position[tableID], positions: position, wg: &wg}
 	}
 	wg.Wait()
 	for {
@@ -299,13 +374,13 @@ func runCDCIterator(s *Source, rowInput chan readRowInput) {
 	var wg sync.WaitGroup
 	for _, tableID := range s.tables {
 		wg.Add(1)
-		position := s.getPosition()[tableID]
-
+		offset := s.getPosition()[tableID]
+		position := s.getPosition()
 		s.tomb.Go(func() (err error) {
 			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getPosition()[tableID]))
 			return s.ReadGoogleRow(rowInput, s.records)
 		})
-		rowInput <- readRowInput{tableID: tableID, offset: position, wg: &wg}
+		rowInput <- readRowInput{tableID: tableID, offset: offset, positions: position, wg: &wg}
 	}
 	wg.Wait()
 }

@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -30,12 +29,13 @@ import (
 )
 
 var (
-	serviceAccount = os.Getenv("SERVICE_ACCOUNT") // eg, export SERVICE_ACCOUNT = "path_to_file"
-	projectID      = os.Getenv("PROJECT_ID")      // eg, export PROJECT_ID ="conduit-connectors"
-	datasetID      = "conduit_test_dataset"
-	tableID        = "conduit_test_table"
-	tableID2       = "conduit_test_table_2"
-	location       = "US"
+	serviceAccount   = "<replace_me>"       // replace with path to service account with permission for the project
+	projectID        = "conduit-connectors" // eg, export PROJECT_ID ="conduit-connectors"
+	datasetID        = "conduit_test_dataset"
+	tableID          = "conduit_test_table"
+	tableID2         = "conduit_test_table_2"
+	tableIDTimeStamp = "conduit_test_table_time_stamp"
+	location         = "US"
 )
 
 // Initial setup required - project with service account.
@@ -109,7 +109,15 @@ func dataSetup() (err error) {
 	return nil
 }
 
-func cleanupDataset() (err error) {
+// Item represents a row item.
+type Item struct {
+	Name      string
+	Age       int
+	Updatedat time.Time
+}
+
+// Initial setup required - project with service account.
+func dataSetupWithTimestamp() (err error) {
 	ctx := context.Background()
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
@@ -118,14 +126,64 @@ func cleanupDataset() (err error) {
 	}
 	defer client.Close()
 
-	table := client.Dataset(datasetID).Table(tableID)
-	if err := table.Delete(ctx); err != nil {
+	meta := &bigquery.DatasetMetadata{
+		Location: location, // See https://cloud.google.com/bigquery/docs/locations
+	}
+
+	// create dataset
+	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return err
+	}
+	fmt.Println("Dataset created")
+
+	sampleSchema := bigquery.Schema{
+		{Name: "name", Type: bigquery.StringFieldType},
+		{Name: "age", Type: bigquery.IntegerFieldType},
+		{Name: "updatedat", Type: bigquery.TimestampFieldType},
+	}
+
+	metaData := &bigquery.TableMetadata{
+		Schema:         sampleSchema,
+		ExpirationTime: time.Now().AddDate(1, 0, 0), // Table will be automatically deleted in 1 year.
+	}
+	tableRef := client.Dataset(datasetID).Table(tableIDTimeStamp)
+	err = tableRef.Create(ctx, metaData)
+	fmt.Println("Error: ", err)
+	if err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
 	}
 
-	table = client.Dataset(datasetID).Table(tableID2)
-	if err := table.Delete(ctx); err != nil {
+	inserter := client.Dataset(datasetID).Table(tableIDTimeStamp).Inserter()
+
+	items := []*Item{}
+
+	for i := 0; i < 20; i++ {
+		item := Item{Name: fmt.Sprintf("Name%d", i), Age: 32, Updatedat: time.Now().UTC().AddDate(0, 0, -i)}
+		items = append(items, &item)
+	}
+
+	if err := inserter.Put(ctx, items); err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
+	}
+	return nil
+
+}
+
+func cleanupDataset(tables []string) (err error) {
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	for _, tableID := range tables {
+		table := client.Dataset(datasetID).Table(tableID)
+		err := table.Delete(ctx)
+		if err != nil && strings.Contains(err.Error(), "Not found") {
+			return err
+		}
 	}
 
 	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
@@ -140,6 +198,61 @@ func cleanupDataset() (err error) {
 	return err
 }
 
+func TestSuccessTimeIncremental(t *testing.T) {
+	// cleanupDataSet()
+	err := dataSetupWithTimestamp()
+	if err != nil {
+		fmt.Println("Could not create values. Err: ", err)
+		return
+	}
+	defer func() {
+		err := cleanupDataset([]string{tableIDTimeStamp})
+		fmt.Println("Got error while cleanup. Err: ", err)
+	}()
+
+	src := Source{}
+	cfg := map[string]string{
+		googlebigquery.ConfigServiceAccount:     serviceAccount,
+		googlebigquery.ConfigProjectID:          projectID,
+		googlebigquery.ConfigDatasetID:          datasetID,
+		googlebigquery.ConfigTableID:            tableIDTimeStamp,
+		googlebigquery.ConfigLocation:           location,
+		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
+	}
+	googlebigquery.PollingTime = time.Second * 1
+
+	ctx := context.Background()
+	err = src.Configure(ctx, cfg)
+	if err != nil {
+		fmt.Println(err)
+	}
+	pos := sdk.Position{}
+
+	err = src.Open(ctx, pos)
+	if err != nil {
+		fmt.Println("errror: ", err)
+	}
+	time.Sleep(15 * time.Second)
+	for {
+		record, err := src.Read(ctx)
+		if err != nil || ctx.Err() != nil {
+			fmt.Println(err)
+			break
+		}
+
+		value := string(record.Position)
+		fmt.Printf("Record position found: %s", value)
+
+		value = string(record.Payload.Bytes())
+		fmt.Println(" :", value)
+	}
+
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
 func TestSuccessfulGet(t *testing.T) {
 	// cleanupDataSet()
 	err := dataSetup()
@@ -148,7 +261,7 @@ func TestSuccessfulGet(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset()
+		err := cleanupDataset([]string{tableID, tableID2})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
@@ -167,8 +280,9 @@ func TestSuccessfulGet(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 	}
-
-	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: 46})
+	positionMap := make(map[string]string)
+	positionMap["conduit_test_table"] = "46"
+	pos, err := json.Marshal(&positionMap)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -206,17 +320,18 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset()
+		err := cleanupDataset([]string{tableID, tableID2})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount: serviceAccount,
-		googlebigquery.ConfigProjectID:      projectID,
-		googlebigquery.ConfigDatasetID:      datasetID,
-		googlebigquery.ConfigTableID:        fmt.Sprintf("%s,%s", tableID, tableID2),
-		googlebigquery.ConfigLocation:       location}
+		googlebigquery.ConfigServiceAccount:     serviceAccount,
+		googlebigquery.ConfigProjectID:          projectID,
+		googlebigquery.ConfigDatasetID:          datasetID,
+		googlebigquery.ConfigTableID:            fmt.Sprintf("%s,%s", tableID, tableID2), // tableID,
+		googlebigquery.ConfigLocation:           location,
+		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:post_abbr", tableID)}
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -247,6 +362,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		fmt.Println("Record found:", value)
 		value = string(record.Payload.Bytes())
 		fmt.Println(":", value)
+		fmt.Println("\n* ")
 	}
 
 	err = src.Teardown(ctx)
@@ -263,17 +379,17 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset()
+		err := cleanupDataset([]string{tableID, tableID2})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount: serviceAccount,
-		googlebigquery.ConfigProjectID:      projectID,
-		googlebigquery.ConfigDatasetID:      datasetID,
-		googlebigquery.ConfigLocation:       location,
-		googlebigquery.ConfigOrderBy:        "conduit_test_table:post_abbr",
+		googlebigquery.ConfigServiceAccount:     serviceAccount,
+		googlebigquery.ConfigProjectID:          projectID,
+		googlebigquery.ConfigDatasetID:          datasetID,
+		googlebigquery.ConfigLocation:           location,
+		googlebigquery.ConfigIncrementalColName: "conduit_test_table:post_abbr",
 	}
 
 	ctx := context.Background()

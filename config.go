@@ -42,18 +42,18 @@ const (
 	ConfigPollingTime = "pollingTime"
 
 	// ConfigOrderBy lets user decide
-	ConfigOrderBy = "incrementingColumnName"
+	ConfigIncrementalColName = "incrementingColumnName"
 )
 
 // Config represents configuration needed for S3
 type Config struct {
-	ProjectID      string
-	DatasetID      string
-	TableID        string
-	ServiceAccount string
-	Location       string
-	PollingTime    string
-	Orderby        map[string]string
+	ProjectID        string
+	DatasetID        string
+	TableID          string
+	ServiceAccount   string
+	Location         string
+	PollingTime      string
+	IncrementColName map[string]string // IncrementColName is table wise info about column in each table
 }
 
 var (
@@ -98,15 +98,15 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		Location:       cfg[ConfigLocation],
 		PollingTime:    cfg[ConfigPollingTime]}
 
-	if orderby, ok := cfg[ConfigOrderBy]; ok {
-		config.Orderby = make(map[string]string)
+	if orderby, ok := cfg[ConfigIncrementalColName]; ok {
+		config.IncrementColName = make(map[string]string)
 		tableArr := strings.Split(orderby, ",")
 		for _, table := range tableArr {
 			singleTableRow := strings.Split(table, ":")
 			if len(singleTableRow) < 2 {
-				return SourceConfig{}, errors.New("invalid formating of orderby, should be tableid:columnName,anotherTableid:anotherColumnName")
+				return SourceConfig{}, errors.New("invalid formating of incremental column, should be tableid:columnName,anotherTableid:anotherColumnName")
 			}
-			config.Orderby[singleTableRow[0]] = singleTableRow[1]
+			config.IncrementColName[singleTableRow[0]] = singleTableRow[1]
 		}
 	}
 

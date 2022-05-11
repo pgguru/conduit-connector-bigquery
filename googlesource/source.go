@@ -39,10 +39,8 @@ type Source struct {
 	// do we need Ctx? we have it in all the methods as a param
 	// Neha: for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
-	ctx     context.Context
-	records chan sdk.Record
-	// haris: what's the difference between these two?
-	// Neha: DONE.
+	ctx            context.Context
+	records        chan sdk.Record
 	positions      positions
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
@@ -50,12 +48,7 @@ type Source struct {
 }
 
 type positions struct {
-	// haris: what do the keys represent?
-	// It feels like we're repeating info.
-	// Firstly, we have a LatestPositions field in a latestPositions struct.
-	// Also, IIUC, the keys here are actually table IDs, but we already have a table ID in the Position struct.
-	// Neha: DONE updated it to position
-	positions map[string]int
+	positions map[string]string
 	lock      *sync.Mutex
 }
 
@@ -63,7 +56,7 @@ type Key struct {
 	TableID string
 	// can we use a page token instead?
 	// Neha: Will check it
-	Offset int
+	Offset string
 }
 
 func NewSource() sdk.Source {
@@ -86,8 +79,6 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.ctx = ctx
 	fetchPos(s, pos)
 
-	// haris: can we then rename SDKResponse to just `records`? SDKResponse sounds a bit generic.
-	// Neha: DONE
 	// s.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
 	s.records = make(chan sdk.Record, 100)

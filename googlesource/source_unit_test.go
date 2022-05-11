@@ -49,7 +49,7 @@ func TestSuccessfulTearDown(t *testing.T) {
 	}
 
 	defer func() {
-		err := cleanupDataset()
+		err := cleanupDataset([]string{tableID, tableID2})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
@@ -87,7 +87,7 @@ func TestMultipleTables(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset()
+		err := cleanupDataset([]string{tableID, tableID2})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
@@ -207,7 +207,7 @@ func TestInvalid(t *testing.T) {
 		t.Errorf("expected no error, got %v", err)
 	}
 
-	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: 46})
+	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: fmt.Sprintf("%d", 46)})
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -237,17 +237,17 @@ func TestInvalidOrderByName(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset()
+		err := cleanupDataset([]string{tableID, tableID2})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount: serviceAccount,
-		googlebigquery.ConfigProjectID:      projectID,
-		googlebigquery.ConfigDatasetID:      datasetID,
-		googlebigquery.ConfigLocation:       location,
-		googlebigquery.ConfigOrderBy:        "conduit_test_table-post_abbr",
+		googlebigquery.ConfigServiceAccount:     serviceAccount,
+		googlebigquery.ConfigProjectID:          projectID,
+		googlebigquery.ConfigDatasetID:          datasetID,
+		googlebigquery.ConfigLocation:           location,
+		googlebigquery.ConfigIncrementalColName: "conduit_test_table-post_abbr",
 	}
 
 	ctx := context.Background()
