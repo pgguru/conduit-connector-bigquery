@@ -57,7 +57,7 @@ func Specification() sdk.Specification {
 				Required:    false,
 				Description: "polling period for the CDC mode, formatted as a time.Duration string.",
 			},
-			ConfigOrderBy: {
+			ConfigIncrementalColName: {
 				Default:  "",
 				Required: false,
 				Description: `Column name which provides visibility about newer rows. For eg, updated_at column which stores when the row was last updated\n
