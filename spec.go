@@ -64,6 +64,13 @@ func Specification() sdk.Specification {
 				primary key with incremental value say id of type int or float.  \n eg value,
 				 tableid:columnName,tableid:columnName,...`,
 			},
+			ConfigPrimaryKeyColName: {
+				Default:  "",
+				Required: false,
+				Description: `Column name which provides visibility about uniqueness. For eg, _id which stores \n
+				primary key with incremental value say id of type int or float.  \n eg value,
+				 tableid:columnName,tableid:columnName,...`,
+			},
 		},
 	}
 }
