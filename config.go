@@ -43,17 +43,21 @@ const (
 
 	// ConfigOrderBy lets user decide
 	ConfigIncrementalColName = "incrementingColumnName"
+
+	// ConfigPrimaryKeyColName provide primary key
+	ConfigPrimaryKeyColName = "primaryKeyColName"
 )
 
 // Config represents configuration needed for S3
 type Config struct {
-	ProjectID        string
-	DatasetID        string
-	TableID          string
-	ServiceAccount   string
-	Location         string
-	PollingTime      string
-	IncrementColName map[string]string // IncrementColName is table wise info about column in each table
+	ProjectID         string
+	DatasetID         string
+	TableID           string
+	ServiceAccount    string
+	Location          string
+	PollingTime       string
+	IncrementColName  map[string]string // IncrementColName is table wise info about column in each table
+	PrimaryKeyColName map[string]string
 }
 
 var (
@@ -107,6 +111,18 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 				return SourceConfig{}, errors.New("invalid formating of incremental column, should be tableid:columnName,anotherTableid:anotherColumnName")
 			}
 			config.IncrementColName[singleTableRow[0]] = singleTableRow[1]
+		}
+	}
+
+	if primaryKey, ok := cfg[ConfigPrimaryKeyColName]; ok {
+		config.PrimaryKeyColName = make(map[string]string)
+		tableArr := strings.Split(primaryKey, ",")
+		for _, table := range tableArr {
+			singleTableRow := strings.Split(table, ":")
+			if len(singleTableRow) < 2 {
+				return SourceConfig{}, errors.New("invalid formating of primary key column, should be tableid:columnName,anotherTableid:anotherColumnName")
+			}
+			config.PrimaryKeyColName[singleTableRow[0]] = singleTableRow[1]
 		}
 	}
 

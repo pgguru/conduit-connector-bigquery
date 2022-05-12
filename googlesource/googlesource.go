@@ -42,12 +42,27 @@ type readRowInput struct {
 	wg        *sync.WaitGroup
 }
 
+func (s *Source) checkInitialPos(positions map[string]string, incrementColName map[string]string, tableID string, primaryColName map[string]string) (firstSync, userDefinedOffset bool, userDefinedKey bool) {
+	if _, ok := positions[tableID]; !ok {
+		firstSync = true
+	}
+	if _, ok := incrementColName[tableID]; ok {
+		userDefinedOffset = true
+	}
+
+	if _, ok := primaryColName[tableID]; ok {
+		userDefinedKey = true
+	}
+
+	return firstSync, userDefinedOffset, userDefinedKey
+}
+
 // haris: why does rowInput need to be a chan?
 // Neha: the function is getting called inside a goroutine we get wrong value (everytime the last possible values) and
 // func param will change for each function call
 func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
 	sdk.Logger(s.ctx).Trace().Msg("Inside read google row")
-	var userDefinedOffset bool
+	var userDefinedOffset, userDefinedKey bool
 	var firstSync bool
 
 	input := <-rowInput
@@ -55,13 +70,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 	tableID := input.tableID
 	wg := input.wg
 
-	if _, ok := input.positions[tableID]; !ok {
-		firstSync = true
-	}
-
-	if _, ok := s.sourceConfig.Config.IncrementColName[tableID]; ok {
-		userDefinedOffset = true
-	}
+	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(input.positions, s.sourceConfig.Config.IncrementColName, tableID, s.sourceConfig.Config.PrimaryKeyColName)
 	lastRow := false
 
 	defer wg.Done()
@@ -130,30 +139,28 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 					if Schema[i].Name == s.sourceConfig.Config.IncrementColName[tableID] {
 						offset = fmt.Sprint(data[Schema[i].Name])
 						offset = getType(Schema[i].Type, offset)
+					}
+				}
+
+				// if we have found the user provided incremental key that would be used as offset
+				if userDefinedKey {
+					if Schema[i].Name == s.sourceConfig.Config.PrimaryKeyColName[tableID] {
+						keyValue := fmt.Sprintf("%v", data[Schema[i].Name])
+						// offset = getType(Schema[i].Type, offset)
 						key = Key{
 							TableID: tableID,
-							Offset:  offset,
+							Offset:  keyValue,
 						}
 					}
 				}
 			}
 
 			if !userDefinedOffset {
-				// if user doesn't provide any incremental key we manually create offsets to pull data
-				if firstSync {
-					offset = "0"
-				}
-				offsetInt, err := strconv.Atoi(offset)
+				offset, key, err = calcOffset(firstSync, offset, tableID)
 				if err != nil {
-					sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while converting")
+					sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
 					continue
 				}
-				offsetInt++
-				key = Key{
-					TableID: tableID,
-					Offset:  fmt.Sprintf("%d", offsetInt),
-				}
-				offset = fmt.Sprintf("%d", offsetInt)
 			}
 			buffer := &bytes.Buffer{}
 			if err := gob.NewEncoder(buffer).Encode(key); err != nil {
@@ -167,7 +174,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 			// keep the track of last rows fetched for each table.
 			// this helps in implementing incremental syncing.
-			recPosition, err := s.writePosition(key.TableID, key.Offset)
+			recPosition, err := s.writePosition(tableID, offset)
 			if err != nil {
 				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
@@ -183,11 +190,28 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 		}
 	}
 	return
+}
 
+func calcOffset(firstSync bool, offset, tableID string) (string, Key, error) {
+	// if user doesn't provide any incremental key we manually create offsets to pull data
+	if firstSync {
+		offset = "0"
+	}
+	offsetInt, err := strconv.Atoi(offset)
+	if err != nil {
+		// sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while converting")
+		return offset, Key{}, err
+	}
+	offsetInt++
+	key := Key{
+		TableID: tableID,
+		Offset:  fmt.Sprintf("%d", offsetInt),
+	}
+	offset = fmt.Sprintf("%d", offsetInt)
+	return offset, key, err
 }
 
 func getType(fieldType bigquery.FieldType, offset string) string {
-
 	switch fieldType {
 	case bigquery.IntegerFieldType:
 		return offset
@@ -230,20 +254,18 @@ func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (
 		if firstSync {
 			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
 				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
-
 		} else {
 			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` WHERE " + columnName +
 				" > " + offset + " ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
 		}
 	} else {
 		// add default value if none specified
-		if len(offset) <= 0 {
+		if len(offset) == 0 {
 			offset = "0"
 		}
 		// if no incremental value provided using default offset which is created by incrementing a counter each time a row is sync.
 		query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
 			" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + offset
-
 	}
 	q := s.bqReadClient.Query(query)
 	sdk.Logger(s.ctx).Trace().Str("q ", q.Q)

@@ -42,5 +42,6 @@ server to validate configuration and dynamically display configuration options t
 |`datasetLocation`|Specify location were dataset exist|true|false|
 |`pollingTime`|Specify time foramtted as a time.Duration string, after which polling of data should be done. For eg, "2s", "500ms"|false|true|
 |`incrementingColumnName`|Specify the column name which provide visibility about newer row or newer updates. It can be either `updated_at` timestamp which specifies when the table was last updated. It can be a `ID` of type int or float whose value increases with every new record coming in. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering.|true|false|
+|`primaryKeyColName`|Specify the primary key column name. eg, `ID` of type int or float or any primary key. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering. This field is recommended|true|false|
 
  

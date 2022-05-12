@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -29,8 +30,8 @@ import (
 )
 
 var (
-	serviceAccount   = "<replace_me>"       // replace with path to service account with permission for the project
-	projectID        = "conduit-connectors" // eg, export PROJECT_ID ="conduit-connectors"
+	serviceAccount   = os.Getenv("SERVICE_ACCOUNT") // eg, export SERVICE_ACCOUNT = "path_to_file"
+	projectID        = os.Getenv("PROJECT_ID")      // eg, export PROJECT_ID ="conduit-connectors"
 	datasetID        = "conduit_test_dataset"
 	tableID          = "conduit_test_table"
 	tableID2         = "conduit_test_table_2"
@@ -153,20 +154,20 @@ func dataSetupWithTimestamp() (err error) {
 		return err
 	}
 
-	inserter := client.Dataset(datasetID).Table(tableIDTimeStamp).Inserter()
-
 	items := []*Item{}
 
 	for i := 0; i < 20; i++ {
-		item := Item{Name: fmt.Sprintf("Name%d", i), Age: 32, Updatedat: time.Now().UTC().AddDate(0, 0, -i)}
+		item := Item{Name: fmt.Sprintf("Name%d", 20-i), Age: 32, Updatedat: time.Now().UTC().AddDate(0, 0, -i)}
 		items = append(items, &item)
 	}
 
+	// tableRef = client.Dataset(datasetID).Table(tableIDTimeStamp)
+	inserter := client.Dataset(datasetID).Table(tableIDTimeStamp).Inserter()
+	fmt.Println("inserter: ", inserter)
 	if err := inserter.Put(ctx, items); err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
 	}
 	return nil
-
 }
 
 func cleanupDataset(tables []string) (err error) {
@@ -199,7 +200,7 @@ func cleanupDataset(tables []string) (err error) {
 }
 
 func TestSuccessTimeIncremental(t *testing.T) {
-	// cleanupDataSet()
+	// cleanupDataset([]string{tableIDTimeStamp})
 	err := dataSetupWithTimestamp()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -218,6 +219,7 @@ func TestSuccessTimeIncremental(t *testing.T) {
 		googlebigquery.ConfigTableID:            tableIDTimeStamp,
 		googlebigquery.ConfigLocation:           location,
 		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
+		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:age", tableIDTimeStamp),
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
@@ -245,6 +247,67 @@ func TestSuccessTimeIncremental(t *testing.T) {
 
 		value = string(record.Payload.Bytes())
 		fmt.Println(" :", value)
+
+		value = string(record.Key.Bytes())
+		fmt.Println("Key :", value)
+	}
+
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestSuccessPrimaryKey(t *testing.T) {
+	// cleanupDataset([]string{tableIDTimeStamp})
+	err := dataSetupWithTimestamp()
+	if err != nil {
+		fmt.Println("Could not create values. Err: ", err)
+		return
+	}
+	defer func() {
+		err := cleanupDataset([]string{tableIDTimeStamp})
+		fmt.Println("Got error while cleanup. Err: ", err)
+	}()
+
+	src := Source{}
+	cfg := map[string]string{
+		googlebigquery.ConfigServiceAccount:     serviceAccount,
+		googlebigquery.ConfigProjectID:          projectID,
+		googlebigquery.ConfigDatasetID:          datasetID,
+		googlebigquery.ConfigTableID:            tableIDTimeStamp,
+		googlebigquery.ConfigLocation:           location,
+		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:age", tableIDTimeStamp),
+		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
+	}
+	googlebigquery.PollingTime = time.Second * 1
+
+	ctx := context.Background()
+	err = src.Configure(ctx, cfg)
+	if err != nil {
+		fmt.Println(err)
+	}
+	pos := sdk.Position{}
+
+	err = src.Open(ctx, pos)
+	if err != nil {
+		fmt.Println("errror: ", err)
+	}
+	time.Sleep(15 * time.Second)
+	for {
+		record, err := src.Read(ctx)
+		if err != nil || ctx.Err() != nil {
+			fmt.Println(err)
+			break
+		}
+
+		value := string(record.Position)
+		fmt.Printf("Record position found: %s", value)
+
+		value = string(record.Payload.Bytes())
+		fmt.Println(" :", value)
+		value = string(record.Key.Bytes())
+		fmt.Println("Key :", value)
 	}
 
 	err = src.Teardown(ctx)
