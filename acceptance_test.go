@@ -14,30 +14,23 @@
 
 package googlebigquery
 
-// import (
-//     "testing"
-
-//     sdk "github.com/conduitio/conduit-connector-sdk"
-//     "github.com/google/uuid"
-// )
-
 // func TestAcceptance(t *testing.T) {
-//     cfg := testConfigMap()
+// 	cfg := testConfigMap()
 
-//     sdk.AcceptanceTest(t, sdk.ConfigurableAcceptanceTestDriver{
-//         Config: sdk.ConfigurableAcceptanceTestDriverConfig{
-//             Connector: sdk.Connector{ // Note that this variable should rather be created globally in `connector.go`
-//                 NewSpecification: Specification,
-//                 NewSource:        NewSource,
-//                 NewDestination:   NewDestination,
-//             },
-//             SourceConfig:      cfg,
-//             DestinationConfig: cfg,
+// 	sdk.AcceptanceTest(t, sdk.ConfigurableAcceptanceTestDriver{
+// 		Config: sdk.ConfigurableAcceptanceTestDriverConfig{
+// 			Connector: sdk.Connector{ // Note that this variable should rather be created globally in `connector.go`
+// 				NewSpecification: Specification,
+// 				NewSource:        NewSource,
+// 				NewDestination:   NewDestination,
+// 			},
+// 			SourceConfig:      cfg,
+// 			DestinationConfig: cfg,
 
-//             BeforeTest: func(t *testing.T) {
-//                 // use new topic for each test
-//                 cfg[Topic] = "test-topic-" + uuid.NewString()
-//             },
-//         },
-//     })
+// 			BeforeTest: func(t *testing.T) {
+// 				// use new topic for each test
+// 				cfg[Topic] = "test-topic-" + uuid.NewString()
+// 			},
+// 		},
+// 	})
 // }
