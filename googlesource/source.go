@@ -151,8 +151,11 @@ func (s *Source) StopIterator() error {
 			return err
 		}
 	}
-	s.ticker.Stop()
-	s.tomb.Kill(errors.New("iterator is stopped"))
-
+	if s.ticker != nil {
+		s.ticker.Stop()
+	}
+	if s.tomb != nil {
+		s.tomb.Kill(errors.New("iterator is stopped"))
+	}
 	return nil
 }
