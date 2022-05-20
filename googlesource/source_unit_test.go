@@ -230,7 +230,6 @@ func TestInvalid(t *testing.T) {
 }
 
 func TestInvalidOrderByName(t *testing.T) {
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)

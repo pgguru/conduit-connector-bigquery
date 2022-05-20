@@ -47,9 +47,12 @@ type Source struct {
 	iteratorClosed chan bool
 }
 
+// positions struct to maintain syncing status of tables
 type positions struct {
+	// position - map of tableIds and corresponding last position synced
 	positions map[string]string
-	lock      *sync.Mutex
+	// lock for goroutine safe access of position
+	lock *sync.Mutex
 }
 
 type Key struct {
@@ -88,7 +91,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 		googlebigquery.PollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime)
 		if err != nil {
 			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
-			return errors.New("invalid duration provided")
+			return errors.New("invalid polling time duration provided")
 		}
 	}
 

@@ -26,7 +26,6 @@ import (
 )
 
 func TestSuccessTimeIncremental(t *testing.T) {
-	// cleanupDataset([]string{tableIDTimeStamp})
 	err := dataSetupWithTimestamp()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -85,7 +84,6 @@ func TestSuccessTimeIncremental(t *testing.T) {
 }
 
 func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
-	// cleanupDataset([]string{tableIDTimeStamp})
 	err := dataSetupWithTimestamp()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -174,7 +172,6 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 }
 
 func TestSuccessPrimaryKey(t *testing.T) {
-	// cleanupDataset([]string{tableIDTimeStamp})
 	err := dataSetupWithTimestamp()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -232,7 +229,6 @@ func TestSuccessPrimaryKey(t *testing.T) {
 }
 
 func TestSuccessfulGet(t *testing.T) {
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -291,7 +287,6 @@ func TestSuccessfulGet(t *testing.T) {
 }
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -350,7 +345,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 }
 
 func TestSuccessfulOrderByName(t *testing.T) {
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
