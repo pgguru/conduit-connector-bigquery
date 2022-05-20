@@ -52,11 +52,11 @@ const (
 type Config struct {
 	ProjectID         string
 	DatasetID         string
-	TableID           string
+	TableIDs          string
 	ServiceAccount    string
 	Location          string
 	PollingTime       string
-	IncrementColName  map[string]string // IncrementColName is table wise info about column in each table
+	IncrementColName  map[string]string // IncrementColName is map of tableID and corresponding incrementing column name
 	PrimaryKeyColName map[string]string
 }
 
@@ -98,7 +98,7 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		ServiceAccount: cfg[ConfigServiceAccount],
 		ProjectID:      cfg[ConfigProjectID],
 		DatasetID:      cfg[ConfigDatasetID],
-		TableID:        cfg[ConfigTableID],
+		TableIDs:       cfg[ConfigTableID],
 		Location:       cfg[ConfigLocation],
 		PollingTime:    cfg[ConfigPollingTime]}
 

@@ -42,14 +42,19 @@ type readRowInput struct {
 	wg        *sync.WaitGroup
 }
 
+// checkInitialPos helps in creating the query to fetch data from endpoint
 func (s *Source) checkInitialPos(positions map[string]string, incrementColName map[string]string, tableID string, primaryColName map[string]string) (firstSync, userDefinedOffset bool, userDefinedKey bool) {
+	// if its the firstSync no offset is applied
 	if _, ok := positions[tableID]; !ok {
 		firstSync = true
 	}
+
+	// if incrementColName set - we orderBy the provided column name
 	if _, ok := incrementColName[tableID]; ok {
 		userDefinedOffset = true
 	}
 
+	// if primaryColName set - we orderBy the provided column name
 	if _, ok := primaryColName[tableID]; ok {
 		userDefinedKey = true
 	}
@@ -102,7 +107,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			}
 
 			err := it.Next(&row)
-			Schema := it.Schema
+			schema := it.Schema
 
 			if err == iterator.Done {
 				sdk.Logger(s.ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
@@ -123,7 +128,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 			for i, r := range row {
 				// handle dates
-				if Schema[i].Type == bigquery.TimestampFieldType {
+				if schema[i].Type == bigquery.TimestampFieldType {
 					dateR := fmt.Sprintf("%v", r)
 					dateLocal, err := time.Parse("2006-01-02 15:04:05.999999 -0700 MST", dateR)
 					if err != nil {
@@ -132,20 +137,20 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 					}
 					r = dateLocal.Format("2006-01-02 15:04:05.999999 MST")
 				}
-				data[Schema[i].Name] = r
+				data[schema[i].Name] = r
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedOffset {
-					if Schema[i].Name == s.sourceConfig.Config.IncrementColName[tableID] {
-						offset = fmt.Sprint(data[Schema[i].Name])
-						offset = getType(Schema[i].Type, offset)
+					if schema[i].Name == s.sourceConfig.Config.IncrementColName[tableID] {
+						offset = fmt.Sprint(data[schema[i].Name])
+						offset = getType(schema[i].Type, offset)
 					}
 				}
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedKey {
-					if Schema[i].Name == s.sourceConfig.Config.PrimaryKeyColName[tableID] {
-						keyValue := fmt.Sprintf("%v", data[Schema[i].Name])
+					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColName[tableID] {
+						keyValue := fmt.Sprintf("%v", data[schema[i].Name])
 						// offset = getType(Schema[i].Type, offset)
 						key = Key{
 							TableID: tableID,
@@ -342,13 +347,13 @@ func fetchPos(s *Source, pos sdk.Position) {
 }
 
 func getTables(s *Source) (err error) {
-	if s.sourceConfig.Config.TableID == "" {
+	if s.sourceConfig.Config.TableIDs == "" {
 		s.tables, err = s.listTables(s.sourceConfig.Config.ProjectID, s.sourceConfig.Config.DatasetID)
 		if err != nil {
 			sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
 		}
 	} else {
-		s.tables = strings.Split(s.sourceConfig.Config.TableID, ",")
+		s.tables = strings.Split(s.sourceConfig.Config.TableIDs, ",")
 	}
 	return err
 }
