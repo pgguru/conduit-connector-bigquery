@@ -21,14 +21,14 @@ Run `make build` to build the connector.
 [comment]: <> (fix table format and spacing)
 | name |  description | required | default value |
 |------|--------------|----------|---------------|
-|`serviceAccount`|Path to service account file with access to project|true| false|
-|`projectID`| The Project ID on endpoint|true| false|
-|`datasetID`|The dataset ID to pull data from.|true|false|
-|`tableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|false|
-|`datasetLocation`|Specify location were dataset exist|true|false|
-|`pollingTime`|Specify time foramtted as a time.Duration string, after which polling of data should be done. For eg, "2s", "500ms"|false|true|
-|`incrementingColumnName`|Specify the column name which provide visibility about newer row or newer updates. It can be either `updated_at` timestamp which specifies when the table was last updated. It can be a `ID` of type int or float whose value increases with every new record coming in. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering.|false|false|
-|`primaryKeyColName`|Specify the primary key column name. eg, `ID` of type int or float or any primary key. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering. This field is recommended|false|false|
+|`serviceAccount`|Path to service account file with access to project. ref: https://cloud.google.com/docs/authentication/getting-started|true| - |
+|`projectID`| The Project ID on endpoint|true| - |
+|`datasetID`|The dataset ID to pull data from.|true| - |
+|`tableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|all tables in dataset|
+|`datasetLocation`|Specify location were dataset exist|true| - |
+|`pollingTime`|Specify time foramtted as a time.Duration string, after which polling of data should be done. For eg, "2s", "500ms"|false|5m|
+|`incrementingColumnName`|Specify the column name which provide visibility about newer row or newer updates. It can be either `updated_at` timestamp which specifies when the table was last updated. It can be a `ID` of type int or float whose value increases with every new record coming in. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering.|false| - |
+|`primaryKeyColName`|Specify the primary key column name. eg, `ID` of type int or float or any primary key. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering. This field is recommended|false| - |
 
 ### How to configure
 Create a connector using - `POST /v1/connectors` API
