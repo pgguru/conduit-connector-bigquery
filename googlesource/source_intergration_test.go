@@ -162,7 +162,6 @@ func dataSetupWithTimestamp() (err error) {
 		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableIDTimeStamp + "`  values ('name" + iString +
 			"', " + iString + ", '" + time.Now().UTC().AddDate(0, 0, -i).Format("2006-01-02 15:04:05.999999 MST") + "' )"
 
-		// fmt.Println(query)
 		q := client.Query(query)
 		q.Location = location
 
@@ -190,7 +189,6 @@ func dataUpdationWithTimestamp() {
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
 	if err != nil {
 		log.Println("Error found: ", err)
-		// return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 	defer client.Close()
 
@@ -244,7 +242,6 @@ func cleanupDataset(tables []string) (err error) {
 }
 
 func TestSuccessTimeIncremental(t *testing.T) {
-	// cleanupDataset([]string{tableIDTimeStamp})
 	err := dataSetupWithTimestamp()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -303,7 +300,6 @@ func TestSuccessTimeIncremental(t *testing.T) {
 }
 
 func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
-	// cleanupDataset([]string{tableIDTimeStamp})
 	err := dataSetupWithTimestamp()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -392,7 +388,6 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 }
 
 func TestSuccessPrimaryKey(t *testing.T) {
-	// cleanupDataset([]string{tableIDTimeStamp})
 	err := dataSetupWithTimestamp()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -450,7 +445,6 @@ func TestSuccessPrimaryKey(t *testing.T) {
 }
 
 func TestSuccessfulGet(t *testing.T) {
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -509,7 +503,6 @@ func TestSuccessfulGet(t *testing.T) {
 }
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
@@ -568,7 +561,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 }
 
 func TestSuccessfulOrderByName(t *testing.T) {
-	// cleanupDataSet()
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
