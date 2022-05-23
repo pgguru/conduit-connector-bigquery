@@ -1,13 +1,17 @@
 package googlesource
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	sdk "github.com/conduitio/conduit-connector-sdk"
+	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/option"
 )
 
@@ -101,6 +105,92 @@ func dataSetup() (err error) {
 	fmt.Println("Table created:", tableID2)
 
 	return nil
+}
+
+// dataSetupWithRecord Initial setup required - project with service account.
+func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
+	ctx := context.Background()
+	tableID := config[googlebigquery.ConfigTableID]
+	fmt.Println("*****Record: ", len(record))
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return result, fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	meta := &bigquery.DatasetMetadata{
+		Location: location, // See https://cloud.google.com/bigquery/docs/locations
+	}
+
+	// create dataset
+	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return result, err
+	}
+	fmt.Println("Dataset created")
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return result, fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	type sample struct {
+		Name string `json:"name"`
+		Abb  string `json:"abb"`
+	}
+	sampleSchema := bigquery.Schema{
+		{Name: "name", Type: bigquery.StringFieldType},
+		{Name: "abb", Type: bigquery.StringFieldType},
+	}
+
+	metaData := &bigquery.TableMetadata{
+		Schema:         sampleSchema,
+		ExpirationTime: time.Now().AddDate(1, 0, 0), // Table will be automatically deleted in 1 year.
+	}
+	tableRef := client.Dataset(datasetID).Table(tableID)
+	err = tableRef.Create(ctx, metaData)
+	fmt.Println("Error: ", err)
+	if err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return result, err
+	}
+
+	var query string
+
+	for i := 0; i < len(record); i++ {
+		fmt.Println("length of record  **", len(record))
+		name := fmt.Sprintf("name%d", i)
+		abb := fmt.Sprintf("name%d", i)
+		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + name + "' , '" + abb + "')"
+
+		singleRow := sample{Name: name, Abb: abb}
+		buffer := &bytes.Buffer{}
+		if err = gob.NewEncoder(buffer).Encode(singleRow); err != nil {
+			log.Println("error found", err)
+			return
+		}
+		byteKey := buffer.Bytes()
+
+		result = append(result, sdk.Record{Payload: sdk.RawData(byteKey)})
+		fmt.Println(query)
+		q := client.Query(query)
+		q.Location = location
+
+		job, err := q.Run(ctx)
+		if err != nil {
+			log.Println("Error found: ", err)
+		}
+
+		status, err := job.Wait(ctx)
+		if err != nil {
+			log.Println("Error found: ", err)
+			return result, err
+		}
+
+		if err = status.Err(); err != nil {
+			log.Println("Error found: ", err)
+		}
+	}
+	return result, nil
 }
 
 // Item represents a row item.

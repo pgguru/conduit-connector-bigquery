@@ -54,7 +54,7 @@ func (s *Source) checkInitialPos(positions map[string]string, incrementColName m
 		userDefinedOffset = true
 	}
 
-	// if primaryColName set - we orderBy the provided column name
+	// if primaryColName set - we use it for key in the record
 	if _, ok := primaryColName[tableID]; ok {
 		userDefinedKey = true
 	}

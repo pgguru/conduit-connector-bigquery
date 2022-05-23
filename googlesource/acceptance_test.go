@@ -103,10 +103,8 @@ func TestAcceptance(t *testing.T) {
 		googlebigquery.ConfigServiceAccount: serviceAccount,
 		googlebigquery.ConfigProjectID:      projectID,
 		googlebigquery.ConfigDatasetID:      datasetID,
-		googlebigquery.ConfigTableID:        tableID,
+		googlebigquery.ConfigTableID:        "table_acceptance",
 		googlebigquery.ConfigLocation:       location,
-		// googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
-		// googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:age", tableIDTimeStamp),
 	}
 
 	sdk.AcceptanceTest(t, AcceptanceTestDriver{
@@ -114,16 +112,8 @@ func TestAcceptance(t *testing.T) {
 			Connector: sdk.Connector{
 				NewSpecification: googlebigquery.Specification,
 				NewSource:        NewSource,
-				// NewDestination:   NewDestination,
 			},
-			SourceConfig: cfg,
-			// DestinationConfig: cfg,
-
-			// BeforeTest: func(t *testing.T) {
-			// 	cfg[Topic] = "TestAcceptance-" + uuid.NewString()
-			// },
-			// AfterTest: func(t *testing.T) {
-			// },
+			SourceConfig:  cfg,
 			GoleakOptions: []goleak.Option{
 				// kafka.DefaultTransport starts some goroutines: https://github.com/segmentio/kafka-go/issues/599
 				// goleak.IgnoreTopFunction("github.com/segmentio/kafka-go.(*connPool).discover"),
@@ -218,13 +208,14 @@ func (d AcceptanceTestDriver) WriteToSource(t *testing.T, records []sdk.Record) 
 	// if d.Connector().NewDestination == nil {
 	// 	t.Fatal("connector is missing the field NewDestination, either implement the destination or overwrite the driver method Write")
 	// }
-
+	var err error
 	is := is.New(t)
 	// ctx, cancel := context.WithCancel(context.Background())
 	// defer cancel()
 	config := d.SourceConfig(t)
 	fmt.Println("**config", config)
-	err := writeToSource(config)
+	fmt.Println("*****records :", len(records))
+	records, err = writeToSource(config, records)
 	is.NoErr(err)
 	// d.WriteToSource()
 
@@ -253,9 +244,9 @@ func (d AcceptanceTestDriver) WriteToSource(t *testing.T, records []sdk.Record) 
 	return records
 }
 
-func writeToSource(config map[string]string) (err error) {
-	err = dataSetup()
-	return err
+func writeToSource(config map[string]string, records []sdk.Record) (result []sdk.Record, err error) {
+	result, err = dataSetupWithRecord(config, records)
+	return result, err
 }
 func (d AcceptanceTestDriver) ReadFromDestination(*testing.T, []sdk.Record) []sdk.Record {
 	return []sdk.Record{}
