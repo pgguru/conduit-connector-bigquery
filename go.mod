@@ -10,7 +10,7 @@ require (
 )
 
 require (
-	github.com/matryer/is v1.4.0 // indirect
+	github.com/matryer/is v1.4.0
 	go.uber.org/goleak v1.1.12
 )
 
