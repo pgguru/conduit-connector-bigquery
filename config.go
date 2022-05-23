@@ -56,7 +56,7 @@ type Config struct {
 	ServiceAccount    string
 	Location          string
 	PollingTime       string
-	IncrementColName  map[string]string // IncrementColName is map of tableID and corresponding incrementing column name
+	IncrementColName  map[string]string // IncrementColName is map of tableID and corresponding column which would be used as incrementing column
 	PrimaryKeyColName map[string]string
 }
 
