@@ -15,15 +15,338 @@
 package googlesource
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
+	"google.golang.org/api/option"
 )
+
+var (
+	serviceAccount   = os.Getenv("SERVICE_ACCOUNT") // eg, export SERVICE_ACCOUNT = "path_to_file"
+	projectID        = os.Getenv("PROJECT_ID")      // eg, export PROJECT_ID ="conduit-connectors"
+	datasetID        = "conduit_test_dataset"
+	tableID          = "conduit_test_table"
+	tableID2         = "conduit_test_table_2"
+	tableIDTimeStamp = "conduit_test_table_time_stamp"
+	location         = "US"
+	globalCounter    = 0
+)
+
+func DataSetup() (err error) {
+	err = dataSetup()
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+// Initial setup required - project with service account.
+func dataSetup() (err error) {
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	meta := &bigquery.DatasetMetadata{
+		Location: location, // See https://cloud.google.com/bigquery/docs/locations
+	}
+
+	// create dataset
+	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return err
+	}
+	fmt.Println("Dataset created")
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	gcsRef := bigquery.NewGCSReference("gs://cloud-samples-data/bigquery/us-states/us-states.json")
+	gcsRef.SourceFormat = bigquery.JSON
+	gcsRef.Schema = bigquery.Schema{
+		{Name: "name", Type: bigquery.StringFieldType},
+		{Name: "post_abbr", Type: bigquery.StringFieldType},
+	}
+	loader := client.Dataset(datasetID).Table(tableID).LoaderFrom(gcsRef)
+	loader.WriteDisposition = bigquery.WriteEmpty
+
+	job, err := loader.Run(ctx)
+	if err != nil {
+		return err
+	}
+	status, err := job.Wait(ctx)
+	if err != nil {
+		return err
+	}
+
+	if status.Err() != nil && !strings.Contains(status.Err().Error(), "duplicate") {
+		return fmt.Errorf("job completed with error: %v", status.Err())
+	}
+
+	fmt.Println("Table created:", tableID)
+	// create another table
+
+	loader = client.Dataset(datasetID).Table(tableID2).LoaderFrom(gcsRef)
+	loader.WriteDisposition = bigquery.WriteEmpty
+
+	job, err = loader.Run(ctx)
+	if err != nil {
+		return err
+	}
+	status, err = job.Wait(ctx)
+	if err != nil {
+		return err
+	}
+
+	if status.Err() != nil && !strings.Contains(status.Err().Error(), "duplicate") {
+		return fmt.Errorf("job completed with error: %v", status.Err())
+	}
+	time.Sleep(time.Second * 10)
+	fmt.Println("Table created:", tableID2)
+
+	return nil
+}
+
+// dataSetupWithRecord Initial setup required - project with service account.
+func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
+	ctx := context.Background()
+	tableID := config[googlebigquery.ConfigTableID]
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return result, fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	meta := &bigquery.DatasetMetadata{
+		Location: location, // See https://cloud.google.com/bigquery/docs/locations
+	}
+
+	// create dataset
+	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return result, err
+	}
+	fmt.Println("Dataset created")
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return result, fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	sampleSchema := bigquery.Schema{
+		{Name: "abb", Type: bigquery.StringFieldType},
+		{Name: "name", Type: bigquery.StringFieldType},
+	}
+
+	metaData := &bigquery.TableMetadata{
+		Schema:         sampleSchema,
+		ExpirationTime: time.Now().AddDate(1, 0, 0), // Table will be automatically deleted in 1 year.
+	}
+	tableRef := client.Dataset(datasetID).Table(tableID)
+	err = tableRef.Create(ctx, metaData)
+	if err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return result, err
+	}
+
+	var query string
+	positions := make(map[string]string)
+
+	for i := 0; i < len(record); i++ {
+		// name := fmt.Sprintf("%s", record[i].Payload.Bytes())
+		name := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
+		abb := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
+		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + abb + "' , '" + name + "')"
+
+		data := make(sdk.StructuredData)
+		data["abb"] = abb
+		data["name"] = name
+
+		key := Key{
+			TableID: tableID,
+			Offset:  name,
+		}
+
+		buffer := &bytes.Buffer{}
+		if err := gob.NewEncoder(buffer).Encode(key); err != nil {
+			return result, err
+		}
+		byteKey := buffer.Bytes()
+
+		positions[tableID] = fmt.Sprintf("'%s'", name)
+		positionRecord, err := json.Marshal(&positions)
+		if err != nil {
+			log.Println("error found", err)
+			return result, err
+		}
+
+		result = append(result, sdk.Record{Payload: data, Key: sdk.RawData(byteKey), Position: positionRecord})
+		q := client.Query(query)
+		q.Location = location
+
+		job, err := q.Run(ctx)
+		if err != nil {
+			log.Println("Error found: ", err)
+		}
+
+		status, err := job.Wait(ctx)
+		if err != nil {
+			log.Println("Error found: ", err)
+			return result, err
+		}
+
+		if err = status.Err(); err != nil {
+			log.Println("Error found: ", err)
+		}
+		globalCounter++
+	}
+	return result, nil
+}
+
+// Item represents a row item.
+type Item struct {
+	Name      string
+	Age       int
+	Updatedat time.Time
+}
+
+// Initial setup required - project with service account.
+func dataSetupWithTimestamp() (err error) {
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	meta := &bigquery.DatasetMetadata{
+		Location: location, // See https://cloud.google.com/bigquery/docs/locations
+	}
+
+	// create dataset
+	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return err
+	}
+	fmt.Println("Dataset created")
+
+	sampleSchema := bigquery.Schema{
+		{Name: "name", Type: bigquery.StringFieldType},
+		{Name: "age", Type: bigquery.IntegerFieldType},
+		{Name: "updatedat", Type: bigquery.TimestampFieldType},
+	}
+
+	metaData := &bigquery.TableMetadata{
+		Schema:         sampleSchema,
+		ExpirationTime: time.Now().AddDate(1, 0, 0), // Table will be automatically deleted in 1 year.
+	}
+	tableRef := client.Dataset(datasetID).Table(tableIDTimeStamp)
+	err = tableRef.Create(ctx, metaData)
+	fmt.Println("Error: ", err)
+	if err != nil && !strings.Contains(err.Error(), "duplicate") {
+		return err
+	}
+
+	var query string
+
+	for i := 0; i < 8; i++ {
+		iString := fmt.Sprintf("%d", i)
+		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableIDTimeStamp + "`  values ('name" + iString +
+			"', " + iString + ", '" + time.Now().UTC().AddDate(0, 0, -i).Format("2006-01-02 15:04:05.999999 MST") + "' )"
+
+		q := client.Query(query)
+		q.Location = location
+
+		job, err := q.Run(ctx)
+		if err != nil {
+			log.Println("Error found: ", err)
+		}
+
+		status, err := job.Wait(ctx)
+		if err != nil {
+			log.Println("Error found: ", err)
+		}
+
+		if err := status.Err(); err != nil {
+			log.Println("Error found: ", err)
+		}
+	}
+
+	return nil
+}
+
+func dataUpdationWithTimestamp() {
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		log.Println("Error found: ", err)
+		// return fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	query := "UPDATE `" + projectID + "." + datasetID + "." + tableIDTimeStamp + "` " +
+		" SET updatedat='" + time.Now().UTC().AddDate(0, 0, +10).Format("2006-01-02 15:04:05.999999 MST") + "' WHERE name =" + "'name4';"
+
+	q := client.Query(query)
+	q.Location = location
+
+	job, err := q.Run(ctx)
+	if err != nil {
+		log.Println("Error found: ", err)
+	}
+
+	status, err := job.Wait(ctx)
+	if err != nil {
+		log.Println("Error found: ", err)
+	}
+
+	if err := status.Err(); err != nil {
+		log.Println("Error found: ", err)
+	}
+}
+
+func cleanupDataset(tables []string) (err error) {
+	ctx := context.Background()
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
+
+	for _, tableID := range tables {
+		table := client.Dataset(datasetID).Table(tableID)
+		err := table.Delete(ctx)
+		if err != nil && strings.Contains(err.Error(), "Not found") {
+			return err
+		}
+	}
+
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	if err != nil {
+		return fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+
+	if err = client.Dataset(datasetID).Delete(ctx); err != nil {
+		fmt.Println("Error in delete: ", err)
+		return err
+	}
+	return err
+}
 
 func TestSuccessTimeIncremental(t *testing.T) {
 	err := dataSetupWithTimestamp()
@@ -57,9 +380,9 @@ func TestSuccessTimeIncremental(t *testing.T) {
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		fmt.Println("error: ", err)
 	}
-	time.Sleep(15 * time.Second)
+	time.Sleep(5 * time.Second)
 	for {
 		record, err := src.Read(ctx)
 		if err != nil || ctx.Err() != nil {
@@ -128,6 +451,10 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 			fmt.Println(err)
 			break
 		}
+		if err != nil {
+			fmt.Println("Error: ", err)
+			return
+		}
 
 		value := string(record.Position)
 		fmt.Printf("Record position found: %s", value)
@@ -145,9 +472,9 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 
 	err = src.Open(ctx, recordPos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		fmt.Println("error: ", err)
 	}
-	time.Sleep(15 * time.Second)
+	time.Sleep(5 * time.Second)
 	for {
 		record, err = src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
@@ -203,9 +530,9 @@ func TestSuccessPrimaryKey(t *testing.T) {
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		fmt.Println("error: ", err)
 	}
-	time.Sleep(15 * time.Second)
+	time.Sleep(5 * time.Second)
 	for {
 		record, err := src.Read(ctx)
 		if err != nil || ctx.Err() != nil {
@@ -378,7 +705,7 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		fmt.Println("errror: ", err)
 		t.Errorf("some other error found: %v", err)
 	}
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	for {
 		record, err := src.Read(ctx)

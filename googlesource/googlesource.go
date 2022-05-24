@@ -90,6 +90,10 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 		counter := 0
 		// iterator
 		it, err := s.getRowIterator(offset, tableID, firstSync)
+		if err != nil && strings.Contains(err.Error(), "Not found") {
+			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+			return nil
+		}
 		if err != nil {
 			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 			return err
