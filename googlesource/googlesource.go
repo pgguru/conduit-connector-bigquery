@@ -75,7 +75,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 	tableID := input.tableID
 	wg := input.wg
 
-	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(input.positions, s.sourceConfig.Config.IncrementColName, tableID, s.sourceConfig.Config.PrimaryKeyColName)
+	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(input.positions, s.sourceConfig.Config.IncrementColNames, tableID, s.sourceConfig.Config.PrimaryKeyColNames)
 	lastRow := false
 
 	defer wg.Done()
@@ -141,7 +141,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedOffset {
-					if schema[i].Name == s.sourceConfig.Config.IncrementColName[tableID] {
+					if schema[i].Name == s.sourceConfig.Config.IncrementColNames[tableID] {
 						offset = fmt.Sprint(data[schema[i].Name])
 						offset = getType(schema[i].Type, offset)
 					}
@@ -149,7 +149,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedKey {
-					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColName[tableID] {
+					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColNames[tableID] {
 						keyValue := fmt.Sprintf("%v", data[schema[i].Name])
 						// offset = getType(Schema[i].Type, offset)
 						key = Key{
@@ -204,7 +204,6 @@ func calcOffset(firstSync bool, offset, tableID string) (string, Key, error) {
 	}
 	offsetInt, err := strconv.Atoi(offset)
 	if err != nil {
-		// sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while converting")
 		return offset, Key{}, err
 	}
 	offsetInt++
@@ -251,11 +250,11 @@ func (s *Source) writePosition(tableID string, offset string) (recPosition []byt
 
 // getRowIterator sync data for bigquery using bigquery client jobs
 func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (it *bigquery.RowIterator, err error) {
-	// check for config `IncrementColName`. User can provide the column name which
+	// check for config `IncrementColNames`. User can provide the column name which
 	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
 
 	var query string
-	if columnName, ok := s.sourceConfig.Config.IncrementColName[tableID]; ok {
+	if columnName, ok := s.sourceConfig.Config.IncrementColNames[tableID]; ok {
 		if firstSync {
 			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
 				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)

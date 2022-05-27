@@ -35,6 +35,9 @@ type Source struct {
 	// haris: isn't this part of config?
 	// Neha : TableID is optional in config. If not provided we need to find them and then insert as
 	// array instead of a string. So that can be iterated easily.
+
+	// if a user specified table IDs in the config, then the tables here will be those same table IDs.
+	//  However, if the table IDs in config are not specified, then the tables here will contain the list of all tables
 	tables []string
 	// do we need Ctx? we have it in all the methods as a param
 	// Neha: for all the function running in goroutine we needed the ctx value. To provide the current

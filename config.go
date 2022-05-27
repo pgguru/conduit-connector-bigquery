@@ -50,14 +50,14 @@ const (
 
 // Config represents configuration needed for S3
 type Config struct {
-	ProjectID         string
-	DatasetID         string
-	TableIDs          string
-	ServiceAccount    string
-	Location          string
-	PollingTime       string
-	IncrementColName  map[string]string // IncrementColName is map of tableID and corresponding incrementing column name
-	PrimaryKeyColName map[string]string
+	ProjectID          string
+	DatasetID          string
+	TableIDs           string
+	ServiceAccount     string
+	Location           string
+	PollingTime        string
+	IncrementColNames  map[string]string // IncrementColName is map of tableID and corresponding incrementing column name. This is used as offset
+	PrimaryKeyColNames map[string]string // PrimaryKeyColName is a map of tableIDs and corresponding primary key column. This is used as primary key
 }
 
 var (
@@ -103,26 +103,26 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		PollingTime:    cfg[ConfigPollingTime]}
 
 	if orderby, ok := cfg[ConfigIncrementalColName]; ok {
-		config.IncrementColName = make(map[string]string)
+		config.IncrementColNames = make(map[string]string)
 		tableArr := strings.Split(orderby, ",")
 		for _, table := range tableArr {
 			singleTableRow := strings.Split(table, ":")
 			if len(singleTableRow) < 2 {
 				return SourceConfig{}, errors.New("invalid formating of incremental column, should be tableid:columnName,anotherTableid:anotherColumnName")
 			}
-			config.IncrementColName[singleTableRow[0]] = singleTableRow[1]
+			config.IncrementColNames[singleTableRow[0]] = singleTableRow[1]
 		}
 	}
 
 	if primaryKey, ok := cfg[ConfigPrimaryKeyColName]; ok {
-		config.PrimaryKeyColName = make(map[string]string)
+		config.PrimaryKeyColNames = make(map[string]string)
 		tableArr := strings.Split(primaryKey, ",")
 		for _, table := range tableArr {
 			singleTableRow := strings.Split(table, ":")
 			if len(singleTableRow) < 2 {
 				return SourceConfig{}, errors.New("invalid formating of primary key column, should be tableid:columnName,anotherTableid:anotherColumnName")
 			}
-			config.PrimaryKeyColName[singleTableRow[0]] = singleTableRow[1]
+			config.PrimaryKeyColNames[singleTableRow[0]] = singleTableRow[1]
 		}
 	}
 
