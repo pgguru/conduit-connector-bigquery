@@ -337,23 +337,13 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 	var recordPos []byte
 
 	time.Sleep(15 * time.Second)
-	var record sdk.Record
 	for {
-		record, err = src.Read(ctx)
+		_, err = src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println(err)
 			break
 		}
 
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
-		recordPos = record.Position
 	}
 
 	// check updated
@@ -361,24 +351,16 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 
 	err = src.Open(ctx, recordPos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		fmt.Println("error: ", err)
 	}
 	time.Sleep(15 * time.Second)
 	for {
-		record, err = src.Read(ctx)
+		_, err = src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println(err)
 			break
 		}
 
-		value := string(record.Position)
-		fmt.Printf("After 1st read: Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
 	}
 
 	err = src.Teardown(ctx)
@@ -413,7 +395,7 @@ func TestSuccessPrimaryKey(t *testing.T) {
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
 	pos := sdk.Position{}
 
@@ -423,19 +405,19 @@ func TestSuccessPrimaryKey(t *testing.T) {
 	}
 	time.Sleep(15 * time.Second)
 	for {
-		record, err := src.Read(ctx)
+		_, err = src.Read(ctx)
 		if err != nil || ctx.Err() != nil {
 			fmt.Println(err)
 			break
 		}
 
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
+		// remove below comments to get the records
+		// value := string(record.Position)
+		// fmt.Printf("Record position found: %s", value)
+		// value = string(record.Payload.Bytes())
+		// fmt.Println(" :", value)
+		// value = string(record.Key.Bytes())
+		// fmt.Println("Key :", value)
 	}
 
 	err = src.Teardown(ctx)
@@ -483,17 +465,12 @@ func TestSuccessfulGet(t *testing.T) {
 	}
 	time.Sleep(15 * time.Second)
 	for i := 0; i <= 4; i++ {
-		record, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil || ctx.Err() != nil {
 			fmt.Println(err)
 			break
 		}
 
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
 	}
 
 	err = src.Teardown(ctx)
@@ -539,7 +516,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	for {
-		record, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println("err: ", err)
 			break
@@ -547,11 +524,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		if err != nil {
 			t.Errorf("some other error found: %v", err)
 		}
-		value := string(record.Position)
-		fmt.Println("Record found:", value)
-		value = string(record.Payload.Bytes())
-		fmt.Println(":", value)
-		fmt.Println("\n* ")
 	}
 
 	err = src.Teardown(ctx)
@@ -597,7 +569,7 @@ func TestSuccessfulOrderByName(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	for {
-		record, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println("err: ", err)
 			break
@@ -605,10 +577,7 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		if err != nil {
 			t.Errorf("some other error found: %v", err)
 		}
-		value := string(record.Position)
-		fmt.Println("Record found:", value)
-		value = string(record.Payload.Bytes())
-		fmt.Println(":", value)
+
 	}
 
 	err = src.Teardown(ctx)
