@@ -262,7 +262,6 @@ func TestSuccessTimeIncremental(t *testing.T) {
 			fmt.Println(err)
 			break
 		}
-
 	}
 
 	err = src.Teardown(ctx)
@@ -331,7 +330,6 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 			fmt.Println(err)
 			break
 		}
-
 	}
 
 	err = src.Teardown(ctx)

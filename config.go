@@ -55,8 +55,8 @@ type Config struct {
 	ServiceAccount     string
 	Location           string
 	PollingTime        string
-	IncrementColNames  string // IncrementColName is map of tableID and corresponding incrementing column name. This is used as offset
-	PrimaryKeyColNames string // PrimaryKeyColName is a map of tableIDs and corresponding primary key column. This is used as primary key
+	IncrementColNames  string // IncrementColName is incrementing column name. This is used as offset
+	PrimaryKeyColNames string // PrimaryKeyColName is primary key column. This is used as primary key
 }
 
 var (
