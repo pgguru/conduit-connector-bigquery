@@ -2,12 +2,12 @@
 [Conduit](https://conduit.io) for BigQuery.
 
 #### Source
-A source connector pulls data from bigquery and pushes it to downstream resources via Conduit.
+A source connector pulls data from BigQuery and pushes it to downstream resources via Conduit.
 
 ### Implementation
-The connector pulls data from bigquery for a dataset or selected tables of users choice. The connector syncs incrementally this means
+The connector pulls data from BigQuery for a dataset or selected tables of users choice. The connector syncs incrementally this means
 it keeps on looking for new insertion/updation happening every time interval user specified in any of the table the data is pulled for and syncs it. 
-If the conduit stops or pauses midway the connector will make sure to pull the data which was not pull earlier. 
+If the Conduit stops or pauses midway the connector will make sure to pull the data which was not pull earlier. 
 
 for eg,
 - table A and table B are synced.
