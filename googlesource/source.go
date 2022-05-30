@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -32,35 +31,17 @@ type Source struct {
 	sdk.UnimplementedSource
 	bqReadClient *bigquery.Client
 	sourceConfig googlebigquery.SourceConfig
-	// haris: isn't this part of config?
-	// Neha : TableID is optional in config. If not provided we need to find them and then insert as
-	// array instead of a string. So that can be iterated easily.
-
-	// if a user specified table IDs in the config, then the tables here will be those same table IDs.
-	//  However, if the table IDs in config are not specified, then the tables here will contain the list of all tables
-	tables []string
+	// table to be synced
+	table string
 	// do we need Ctx? we have it in all the methods as a param
 	// Neha: for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
 	ctx            context.Context
 	records        chan sdk.Record
-	positions      positions
+	position       string
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
 	iteratorClosed chan bool
-}
-
-// positions struct to maintain syncing status of tables
-type positions struct {
-	// position - map of tableIds and corresponding last position synced
-	positions map[string]string
-	// lock for goroutine safe access of position
-	lock *sync.Mutex
-}
-
-type Key struct {
-	TableID string
-	Offset  string
 }
 
 func NewSource() sdk.Source {
