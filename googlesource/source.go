@@ -104,7 +104,8 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	client, err := newClient(s.tomb.Context(s.ctx), s.sourceConfig.Config.ProjectID, option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount))
 	if err != nil {
 		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
-		s.tomb.Kill(err)
+		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
+		s.tomb.Kill(clientErr)
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 
