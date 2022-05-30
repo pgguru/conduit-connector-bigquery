@@ -18,7 +18,6 @@ for eg,
 Run `make build` to build the connector.
 
 ### Configuration
-[comment]: <> (fix table format and spacing)
 | name |  description | required | default value |
 |------|--------------|----------|---------------|
 |`serviceAccount`|Path to service account file with access to project. ref: https://cloud.google.com/docs/authentication/getting-started|true| - |
