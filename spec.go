@@ -22,8 +22,8 @@ import (
 func Specification() sdk.Specification {
 	return sdk.Specification{
 		Name:        "bigquery",
-		Summary:     "A bigquery source plugin for Conduit, written in Go.",
-		Description: "A plugin to fetch data from google bigquery",
+		Summary:     "A BigQuery source plugin for Conduit, written in Go.",
+		Description: "A plugin to fetch data from google BigQuery",
 		Version:     "v0.1.0",
 		Author:      "Neha Gupta",
 		SourceParams: map[string]sdk.Parameter{

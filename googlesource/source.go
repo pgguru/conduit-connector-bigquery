@@ -60,9 +60,7 @@ type positions struct {
 
 type Key struct {
 	TableID string
-	// can we use a page token instead?
-	// Neha: Will check it
-	Offset string
+	Offset  string
 }
 
 func NewSource() sdk.Source {
@@ -85,20 +83,22 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.ctx = ctx
 	fetchPos(s, pos)
 
+	pollingTime := googlebigquery.PollingTime
+
 	// s.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
 	s.records = make(chan sdk.Record, 100)
 	s.iteratorClosed = make(chan bool, 2)
 
 	if len(s.sourceConfig.Config.PollingTime) > 0 {
-		googlebigquery.PollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime)
+		pollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime)
 		if err != nil {
 			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
 			return errors.New("invalid polling time duration provided")
 		}
 	}
 
-	s.ticker = time.NewTicker(googlebigquery.PollingTime)
+	s.ticker = time.NewTicker(pollingTime)
 	s.tomb = &tomb.Tomb{}
 
 	client, err := newClient(s.tomb.Context(s.ctx), s.sourceConfig.Config.ProjectID, option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount))
@@ -133,10 +133,6 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	// TODO: understand why handling the closing of iterator fails the plugin
-
-	// s.iteratorClosed <- true
-	// sdk.Logger(s.ctx).Error().Msg("Teardown: closing all channels")
 
 	if s.records != nil {
 		close(s.records)
