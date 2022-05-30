@@ -540,7 +540,6 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		if err != nil {
 			t.Errorf("some other error found: %v", err)
 		}
-
 	}
 
 	err = src.Teardown(ctx)
