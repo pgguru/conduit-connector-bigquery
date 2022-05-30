@@ -379,7 +379,6 @@ func TestSuccessPrimaryKey(t *testing.T) {
 			fmt.Println(err)
 			break
 		}
-
 	}
 
 	err = src.Teardown(ctx)
@@ -432,7 +431,6 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 			fmt.Println(err)
 			break
 		}
-
 	}
 
 	err = src.Teardown(ctx)
@@ -487,7 +485,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		if err != nil {
 			t.Errorf("some other error found: %v", err)
 		}
-
 	}
 
 	err = src.Teardown(ctx)
