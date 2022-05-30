@@ -218,11 +218,6 @@ func getType(fieldType bigquery.FieldType, offset string) string {
 	}
 }
 
-// getPosition prevents race condition happening while using map inside goroutine
-func (s *Source) getPosition() (positions string) {
-	return s.position
-}
-
 // writePosition prevents race condition happening while using map inside goroutine
 func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
 	s.position = offset
@@ -309,15 +304,12 @@ func getTables(s *Source) (err error) {
 	if s.sourceConfig.Config.TableIDs == "" {
 		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
 		return fmt.Errorf("table ID blank")
-
-	} else {
-		s.table = s.sourceConfig.Config.TableIDs
 	}
+	s.table = s.sourceConfig.Config.TableIDs
 	return err
 }
 
 func (s *Source) runIterator() (err error) {
-
 	var wg sync.WaitGroup
 
 	if err = getTables(s); err != nil {

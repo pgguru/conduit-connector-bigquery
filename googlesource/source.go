@@ -115,7 +115,6 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-
 	if s.records != nil {
 		close(s.records)
 	}
