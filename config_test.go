@@ -32,6 +32,8 @@ func TestParseSourceConfigAllConfigPresent(t *testing.T) {
 	cfg[ConfigProjectID] = "test"
 	cfg[ConfigDatasetID] = "test"
 	cfg[ConfigLocation] = "test"
+	cfg[ConfigTableID] = "testTable"
+	cfg[ConfigPrimaryKeyColName] = "primaryKey"
 
 	_, err := ParseSourceConfig(cfg)
 	if err != nil {

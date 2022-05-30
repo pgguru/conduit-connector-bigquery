@@ -35,7 +35,6 @@ var (
 	projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
 	datasetID        = "conduit_test_dataset"
 	tableID          = "conduit_test_table"
-	tableID2         = "conduit_test_table_2"
 	tableIDTimeStamp = "conduit_test_table_time_stamp"
 	location         = "US"
 )
@@ -88,25 +87,6 @@ func dataSetup() (err error) {
 	}
 
 	fmt.Println("Table created:", tableID)
-	// create another table
-
-	loader = client.Dataset(datasetID).Table(tableID2).LoaderFrom(gcsRef)
-	loader.WriteDisposition = bigquery.WriteEmpty
-
-	job, err = loader.Run(ctx)
-	if err != nil {
-		return err
-	}
-	status, err = job.Wait(ctx)
-	if err != nil {
-		return err
-	}
-
-	if status.Err() != nil && !strings.Contains(status.Err().Error(), "duplicate") {
-		return fmt.Errorf("job completed with error: %v", status.Err())
-	}
-
-	fmt.Println("Table created:", tableID2)
 
 	return nil
 }
@@ -259,8 +239,8 @@ func TestSuccessTimeIncremental(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            tableIDTimeStamp,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
-		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:age", tableIDTimeStamp),
+		googlebigquery.ConfigIncrementalColName: "updatedat",
+		googlebigquery.ConfigPrimaryKeyColName:  "age",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
@@ -277,20 +257,12 @@ func TestSuccessTimeIncremental(t *testing.T) {
 	}
 	time.Sleep(15 * time.Second)
 	for {
-		record, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil || ctx.Err() != nil {
 			fmt.Println(err)
 			break
 		}
 
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
 	}
 
 	err = src.Teardown(ctx)
@@ -317,8 +289,8 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            tableIDTimeStamp,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
-		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:age", tableIDTimeStamp),
+		googlebigquery.ConfigIncrementalColName: "updatedat",
+		googlebigquery.ConfigPrimaryKeyColName:  "age",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
@@ -338,12 +310,11 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 
 	time.Sleep(15 * time.Second)
 	for {
-		_, err = src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println(err)
 			break
 		}
-
 	}
 
 	// check updated
@@ -387,8 +358,8 @@ func TestSuccessPrimaryKey(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            tableIDTimeStamp,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:age", tableIDTimeStamp),
-		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
+		googlebigquery.ConfigIncrementalColName: "age",
+		googlebigquery.ConfigPrimaryKeyColName:  "updatedat",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
@@ -419,24 +390,25 @@ func TestSuccessPrimaryKey(t *testing.T) {
 	}
 }
 
-func TestSuccessfulGet(t *testing.T) {
+func TestSuccessfulGetFromPosition(t *testing.T) {
 	err := dataSetup()
 	if err != nil {
 		fmt.Println("Could not create values. Err: ", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
+		err := cleanupDataset([]string{tableID})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount: serviceAccount,
-		googlebigquery.ConfigProjectID:      projectID,
-		googlebigquery.ConfigDatasetID:      datasetID,
-		googlebigquery.ConfigTableID:        tableID,
-		googlebigquery.ConfigLocation:       location,
+		googlebigquery.ConfigServiceAccount:    serviceAccount,
+		googlebigquery.ConfigProjectID:         projectID,
+		googlebigquery.ConfigDatasetID:         datasetID,
+		googlebigquery.ConfigTableID:           tableID,
+		googlebigquery.ConfigLocation:          location,
+		googlebigquery.ConfigPrimaryKeyColName: "post_abbr",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
@@ -445,9 +417,8 @@ func TestSuccessfulGet(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	positionMap := make(map[string]string)
-	positionMap["conduit_test_table"] = "46"
-	pos, err := json.Marshal(&positionMap)
+	position := "46"
+	pos, err := json.Marshal(&position)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -479,7 +450,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
+		err := cleanupDataset([]string{tableID})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
@@ -488,9 +459,10 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		googlebigquery.ConfigServiceAccount:     serviceAccount,
 		googlebigquery.ConfigProjectID:          projectID,
 		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigTableID:            fmt.Sprintf("%s,%s", tableID, tableID2), // tableID,
+		googlebigquery.ConfigTableID:            tableID, // tableID,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:post_abbr", tableID)}
+		googlebigquery.ConfigIncrementalColName: "post_abbr",
+		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr"}
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -517,6 +489,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		if err != nil {
 			t.Errorf("some other error found: %v", err)
 		}
+
 	}
 
 	err = src.Teardown(ctx)
@@ -532,7 +505,7 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
+		err := cleanupDataset([]string{tableID})
 		fmt.Println("Got error while cleanup. Err: ", err)
 	}()
 
@@ -542,7 +515,9 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		googlebigquery.ConfigProjectID:          projectID,
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "conduit_test_table:post_abbr",
+		googlebigquery.ConfigTableID:            tableID,
+		googlebigquery.ConfigIncrementalColName: "post_abbr",
+		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr",
 	}
 
 	ctx := context.Background()

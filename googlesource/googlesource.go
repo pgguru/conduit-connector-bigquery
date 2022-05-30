@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -38,44 +37,40 @@ var (
 type readRowInput struct {
 	tableID   string
 	offset    string
-	positions map[string]string
+	positions string
 	wg        *sync.WaitGroup
 }
 
 // checkInitialPos helps in creating the query to fetch data from endpoint
-func (s *Source) checkInitialPos(positions map[string]string, incrementColName map[string]string, tableID string, primaryColName map[string]string) (firstSync, userDefinedOffset bool, userDefinedKey bool) {
+func (s *Source) checkInitialPos(positions string, incrementColName string, tableID string, primaryColName string) (firstSync, userDefinedOffset bool, userDefinedKey bool) {
 	// if its the firstSync no offset is applied
-	if _, ok := positions[tableID]; !ok {
+	if positions == "" {
 		firstSync = true
 	}
 
 	// if incrementColName set - we orderBy the provided column name
-	if _, ok := incrementColName[tableID]; ok {
+	if len(incrementColName) > 0 {
 		userDefinedOffset = true
 	}
 
 	// if primaryColName set - we orderBy the provided column name
-	if _, ok := primaryColName[tableID]; ok {
+	if len(primaryColName) > 0 {
 		userDefinedKey = true
 	}
 
 	return firstSync, userDefinedOffset, userDefinedKey
 }
 
-// haris: why does rowInput need to be a chan?
-// Neha: the function is getting called inside a goroutine we get wrong value (everytime the last possible values) and
-// func param will change for each function call
-func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
+func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record) (err error) {
 	sdk.Logger(s.ctx).Trace().Msg("Inside read google row")
 	var userDefinedOffset, userDefinedKey bool
 	var firstSync bool
 
-	input := <-rowInput
-	offset := input.offset
-	tableID := input.tableID
-	wg := input.wg
+	offset := rowInput.offset
+	tableID := s.table
+	wg := rowInput.wg
 
-	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(input.positions, s.sourceConfig.Config.IncrementColNames, tableID, s.sourceConfig.Config.PrimaryKeyColNames)
+	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(rowInput.positions, s.sourceConfig.Config.IncrementColNames, tableID, s.sourceConfig.Config.PrimaryKeyColNames)
 	lastRow := false
 
 	defer wg.Done()
@@ -124,7 +119,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 			}
 
 			data := make(sdk.StructuredData)
-			var key Key
+			var key string
 
 			for i, r := range row {
 				// handle dates
@@ -141,32 +136,26 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedOffset {
-					if schema[i].Name == s.sourceConfig.Config.IncrementColNames[tableID] {
+					if schema[i].Name == s.sourceConfig.Config.IncrementColNames {
 						offset = fmt.Sprint(data[schema[i].Name])
 						offset = getType(schema[i].Type, offset)
+					}
+				} else {
+					offset, err = calcOffset(firstSync, offset)
+					if err != nil {
+						sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
+						continue
 					}
 				}
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedKey {
-					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColNames[tableID] {
-						keyValue := fmt.Sprintf("%v", data[schema[i].Name])
-						// offset = getType(Schema[i].Type, offset)
-						key = Key{
-							TableID: tableID,
-							Offset:  keyValue,
-						}
+					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColNames {
+						key = fmt.Sprintf("%v", data[schema[i].Name])
 					}
 				}
 			}
 
-			if !userDefinedOffset {
-				offset, key, err = calcOffset(firstSync, offset, tableID)
-				if err != nil {
-					sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
-					continue
-				}
-			}
 			buffer := &bytes.Buffer{}
 			if err := gob.NewEncoder(buffer).Encode(key); err != nil {
 				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
@@ -179,7 +168,7 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 			// keep the track of last rows fetched for each table.
 			// this helps in implementing incremental syncing.
-			recPosition, err := s.writePosition(tableID, offset)
+			recPosition, err := s.writePosition(offset)
 			if err != nil {
 				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
@@ -197,22 +186,18 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 	return
 }
 
-func calcOffset(firstSync bool, offset, tableID string) (string, Key, error) {
+func calcOffset(firstSync bool, offset string) (string, error) {
 	// if user doesn't provide any incremental key we manually create offsets to pull data
 	if firstSync {
 		offset = "0"
 	}
 	offsetInt, err := strconv.Atoi(offset)
 	if err != nil {
-		return offset, Key{}, err
+		return offset, err
 	}
 	offsetInt++
-	key := Key{
-		TableID: tableID,
-		Offset:  fmt.Sprintf("%d", offsetInt),
-	}
 	offset = fmt.Sprintf("%d", offsetInt)
-	return offset, key, err
+	return offset, err
 }
 
 func getType(fieldType bigquery.FieldType, offset string) string {
@@ -234,18 +219,14 @@ func getType(fieldType bigquery.FieldType, offset string) string {
 }
 
 // getPosition prevents race condition happening while using map inside goroutine
-func (s *Source) getPosition() (positions map[string]string) {
-	s.positions.lock.Lock()
-	defer s.positions.lock.Unlock()
-	return s.positions.positions
+func (s *Source) getPosition() (positions string) {
+	return s.position
 }
 
 // writePosition prevents race condition happening while using map inside goroutine
-func (s *Source) writePosition(tableID string, offset string) (recPosition []byte, err error) {
-	s.positions.lock.Lock()
-	defer s.positions.lock.Unlock()
-	s.positions.positions[tableID] = offset
-	return json.Marshal(&s.positions.positions)
+func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
+	s.position = offset
+	return json.Marshal(&s.position)
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
@@ -254,7 +235,8 @@ func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (
 	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
 
 	var query string
-	if columnName, ok := s.sourceConfig.Config.IncrementColNames[tableID]; ok {
+	if len(s.sourceConfig.Config.IncrementColNames) > 0 {
+		columnName := s.sourceConfig.Config.IncrementColNames
 		if firstSync {
 			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
 				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
@@ -300,25 +282,6 @@ func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (
 	return it, err
 }
 
-// listTables demonstrates iterating through the collection of tables in a given dataset.
-func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
-	ctx := context.Background()
-	tables := []string{}
-
-	ts := s.bqReadClient.Dataset(datasetID).Tables(ctx)
-	for {
-		t, err := ts.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return []string{}, err
-		}
-		tables = append(tables, t.TableID)
-	}
-	return tables, nil
-}
-
 // Next returns the next record from the buffer.
 func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	select {
@@ -334,79 +297,67 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 }
 
 func fetchPos(s *Source, pos sdk.Position) {
-	s.positions = positions{positions: make(map[string]string)}
-	s.positions.lock = new(sync.Mutex)
-	s.positions.lock.Lock()
+	s.position = ""
 
-	err := json.Unmarshal(pos, &s.positions.positions)
+	err := json.Unmarshal(pos, &s.position)
 	if err != nil {
 		sdk.Logger(s.ctx).Info().Msg("Could not get position. Will start with offset 0")
 	}
-	s.positions.lock.Unlock()
 }
 
 func getTables(s *Source) (err error) {
 	if s.sourceConfig.Config.TableIDs == "" {
-		s.tables, err = s.listTables(s.sourceConfig.Config.ProjectID, s.sourceConfig.Config.DatasetID)
-		if err != nil {
-			sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
-		}
+		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
+		return fmt.Errorf("table ID blank")
+
 	} else {
-		s.tables = strings.Split(s.sourceConfig.Config.TableIDs, ",")
+		s.table = s.sourceConfig.Config.TableIDs
 	}
 	return err
 }
 
 func (s *Source) runIterator() (err error) {
-	rowInput := make(chan readRowInput)
+
+	var wg sync.WaitGroup
 
 	if err = getTables(s); err != nil {
 		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
 		return err
 	}
 
-	var wg sync.WaitGroup
 	// Snapshot sync. Start were we left last
-	for _, tableID := range s.tables {
-		wg.Add(1)
+	wg.Add(1)
 
-		s.tomb.Go(func() (err error) {
-			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getPosition()[tableID]))
-			return s.ReadGoogleRow(rowInput, s.records)
-		})
-		position := s.getPosition()
-		rowInput <- readRowInput{tableID: tableID, offset: position[tableID], positions: position, wg: &wg}
-	}
+	rowInput := readRowInput{offset: s.position, positions: s.position, wg: &wg}
+	s.tomb.Go(func() (err error) {
+		sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.table, s.position))
+		return s.ReadGoogleRow(rowInput, s.records)
+	})
+
 	wg.Wait()
+
 	for {
 		select {
 		case <-s.tomb.Dying():
 			return s.tomb.Err()
 		case <-s.ticker.C:
 			sdk.Logger(s.ctx).Trace().Msg("ticker started ")
-
-			if err = getTables(s); err != nil {
-				sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
-				return err
-			}
 			runCDCIterator(s, rowInput)
 		}
 	}
 }
 
-func runCDCIterator(s *Source, rowInput chan readRowInput) {
+func runCDCIterator(s *Source, rowInput readRowInput) {
 	// wait group make sure that we start new iteration only
 	//  after the first iteration is completely done.
 	var wg sync.WaitGroup
-	for _, tableID := range s.tables {
-		wg.Add(1)
-		offset := s.getPosition()[tableID]
-		position := s.getPosition()
-		s.tomb.Go(func() (err error) {
-			sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", tableID, s.getPosition()[tableID]))
-			return s.ReadGoogleRow(rowInput, s.records)
-		})
-		rowInput <- readRowInput{tableID: tableID, offset: offset, positions: position, wg: &wg}
-	}
+	wg.Add(1)
+	rowInput = readRowInput{tableID: s.table, offset: s.position, positions: s.position, wg: &wg}
+
+	s.tomb.Go(func() (err error) {
+		sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.table, s.position))
+		return s.ReadGoogleRow(rowInput, s.records)
+	})
+
 	wg.Wait()
 }
