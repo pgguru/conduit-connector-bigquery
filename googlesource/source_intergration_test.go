@@ -411,13 +411,6 @@ func TestSuccessPrimaryKey(t *testing.T) {
 			break
 		}
 
-		// remove below comments to get the records
-		// value := string(record.Position)
-		// fmt.Printf("Record position found: %s", value)
-		// value = string(record.Payload.Bytes())
-		// fmt.Println(" :", value)
-		// value = string(record.Key.Bytes())
-		// fmt.Println("Key :", value)
 	}
 
 	err = src.Teardown(ctx)
