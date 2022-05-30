@@ -143,7 +143,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	}
 	err := s.StopIterator()
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing bigquery client")
+		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
 		return err
 	}
 	return nil
@@ -153,7 +153,7 @@ func (s *Source) StopIterator() error {
 	if s.bqReadClient != nil {
 		err := s.bqReadClient.Close()
 		if err != nil {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing bigquery client")
+			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
 			return err
 		}
 	}
