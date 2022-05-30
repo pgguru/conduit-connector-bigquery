@@ -27,7 +27,7 @@ Run `make build` to build the connector.
 |`datasetLocation`|Specify location were dataset exist|true| - |
 |`pollingTime`|Specify time foramtted as a time.Duration string, after which polling of data should be done. For eg, "2s", "500ms"|false|5m|
 |`incrementingColumnName`|Specify the column name which provide visibility about newer row or newer updates. It can be either `updated_at` timestamp which specifies when the table was last updated. It can be a `ID` of type int or float whose value increases with every new record coming in. User need to provide column name for table in a format - 'columnName' without any spaces Eg: 'created_by' where created_by is column name. Table with no value will be pulled without any ordering.|false| - |
-|`primaryKeyColName`|Specify the primary key column name. eg, `ID` of type int or float or any primary key. User need to provide column name for each table in a format - 'columnName' without any spaces Eg: 'created_by' where created_by is column name. Table with no value will be pulled without any ordering. This field is recommended|false| - |
+|`primaryKeyColName`|Specify the primary key column name. eg, `ID` of type int or float or any primary key. User need to provide column name for each table in a format - 'columnName' without any spaces Eg: 'created_by' where created_by is column name. |true| - |
 
 ### How to configure
 Create a connector using - `POST /v1/connectors` API
