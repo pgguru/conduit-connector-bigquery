@@ -55,7 +55,9 @@ Sample payload-
  ```
 
 ### Testing
-Run `make test` to run all the unit tests. To run the test cases export - `SERVICE_ACCOUNT` and `PROJECT_ID`
+Run `make test` to run all the unit tests. To run the test cases export environment variable - `GOOGLE_SERVICE_ACCOUNT` and `GOOGLE_PROJECT_ID` where,
+- `GOOGLE_SERVICE_ACCOUNT` is the path to the google service account file.  refer: https://cloud.google.com/docs/authentication/getting-started to create a service account
+- `GOOGLE_PROJECT_ID` is  the ID of projects whose tables data is to be synced
 
 ### Known Issues & Limitations
 * Current implementation handles snapshot and incremental data.

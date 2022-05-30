@@ -31,8 +31,8 @@ import (
 )
 
 var (
-	serviceAccount   = os.Getenv("SERVICE_ACCOUNT") // eg, export SERVICE_ACCOUNT = "path_to_file"
-	projectID        = os.Getenv("PROJECT_ID")      // eg, export PROJECT_ID ="conduit-connectors"
+	serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
+	projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
 	datasetID        = "conduit_test_dataset"
 	tableID          = "conduit_test_table"
 	tableID2         = "conduit_test_table_2"
