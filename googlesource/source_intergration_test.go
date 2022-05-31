@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -30,8 +29,10 @@ import (
 )
 
 var (
-	serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
-	projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
+	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" // eg, export SERVICE_ACCOUNT = "path_to_file"
+	projectID      = "conduit-connectors"
+	// serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
+	// projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
 	datasetID        = "conduit_test_dataset"
 	tableID          = "conduit_test_table"
 	tableID2         = "conduit_test_table_2"
@@ -243,7 +244,7 @@ func cleanupDataset(t *testing.T, tables []string) (err error) {
 func TestSuccessTimeIncremental(t *testing.T) {
 	err := dataSetupWithTimestamp(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
@@ -301,7 +302,7 @@ func TestSuccessTimeIncremental(t *testing.T) {
 func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 	err := dataSetupWithTimestamp(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
@@ -371,7 +372,7 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 func TestSuccessPrimaryKey(t *testing.T) {
 	err := dataSetupWithTimestamp(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
@@ -421,7 +422,7 @@ func TestSuccessPrimaryKey(t *testing.T) {
 func TestSuccessfulGet(t *testing.T) {
 	err := dataSetup(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
@@ -474,7 +475,7 @@ func TestSuccessfulGet(t *testing.T) {
 func TestSuccessfulGetWholeDataset(t *testing.T) {
 	err := dataSetup(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
@@ -527,7 +528,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 func TestSuccessfulOrderByName(t *testing.T) {
 	err := dataSetup(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
