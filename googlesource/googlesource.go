@@ -62,9 +62,7 @@ func (s *Source) checkInitialPos(positions map[string]string, incrementColName m
 	return firstSync, userDefinedOffset, userDefinedKey
 }
 
-// haris: why does rowInput need to be a chan?
-// Neha: the function is getting called inside a goroutine we get wrong value (everytime the last possible values) and
-// func param will change for each function call
+// ReadGoogleRow pulls data from endpoint and pushes it to response channel
 func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
 	sdk.Logger(s.ctx).Trace().Msg("Inside read google row")
 	var userDefinedOffset, userDefinedKey bool
