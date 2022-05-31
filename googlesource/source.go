@@ -31,10 +31,7 @@ type Source struct {
 	sdk.UnimplementedSource
 	bqReadClient *bigquery.Client
 	sourceConfig googlebigquery.SourceConfig
-	// table to be synced
-	// table string
-	// do we need Ctx? we have it in all the methods as a param
-	// Neha: for all the function running in goroutine we needed the ctx value. To provide the current
+	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
 	ctx            context.Context
 	records        chan sdk.Record
@@ -87,8 +84,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	if err != nil {
 		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
 		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
-		s.tomb.Kill(clientErr)
-		return fmt.Errorf("bigquery.NewClient: %v", err)
+		return clientErr
 	}
 
 	s.bqReadClient = client
