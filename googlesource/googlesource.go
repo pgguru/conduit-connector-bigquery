@@ -33,11 +33,6 @@ var (
 	newClient = bigquery.NewClient
 )
 
-type readRowInput struct {
-	offset    string
-	positions string
-}
-
 // checkInitialPos helps in creating the query to fetch data from endpoint
 func (s *Source) checkInitialPos(positions, incrementColName, primaryColName string) (firstSync, userDefinedOffset, userDefinedKey bool) {
 	// if its the firstSync no offset is applied
@@ -59,10 +54,9 @@ func (s *Source) checkInitialPos(positions, incrementColName, primaryColName str
 }
 
 // ReadGoogleRow fetches data from endpoint. It creates sdk.record and puts it in response channel
-func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record) (err error) {
-	sdk.Logger(s.ctx).Trace().Msg("Inside read google row")
-	var userDefinedOffset, userDefinedKey bool
-	var firstSync bool
+func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
+	sdk.Logger(ctx).Trace().Msg("Inside read google row")
+	var userDefinedOffset, userDefinedKey, firstSync bool
 
 	offset := s.position
 	tableID := s.sourceConfig.Config.TableID
@@ -72,17 +66,17 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 
 	for {
 		// Keep on reading till end of table
-		sdk.Logger(s.ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
+		sdk.Logger(ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
 		if lastRow {
-			sdk.Logger(s.ctx).Trace().Str("tableID", tableID).Msg("Its the last row. Done processing table")
+			sdk.Logger(ctx).Trace().Str("tableID", tableID).Msg("Its the last row. Done processing table")
 			break
 		}
 
 		counter := 0
 		// iterator
-		it, err := s.getRowIterator(offset, tableID, firstSync)
+		it, err := s.getRowIterator(ctx, offset, tableID, firstSync)
 		if err != nil {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 			return err
 		}
 
@@ -93,7 +87,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 			schema := it.Schema
 
 			if err == iterator.Done {
-				sdk.Logger(s.ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
+				sdk.Logger(ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
 				if counter < googlebigquery.CounterLimit {
 					// if counter is smaller than the limit we have reached the end of
 					// iterator. And will break the for loop now.
@@ -102,7 +96,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 				break
 			}
 			if err != nil {
-				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error while iterating")
+				sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error while iterating")
 				return err
 			}
 
@@ -115,7 +109,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 					dateR := fmt.Sprintf("%v", r)
 					dateLocal, err := time.Parse("2006-01-02 15:04:05.999999 -0700 MST", dateR)
 					if err != nil {
-						sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while converting to time format")
+						sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while converting to time format")
 						return err
 					}
 					r = dateLocal.Format("2006-01-02 15:04:05.999999 MST")
@@ -131,7 +125,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 				} else {
 					offset, err = calcOffset(firstSync, offset)
 					if err != nil {
-						sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
+						sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
 						continue
 					}
 				}
@@ -146,7 +140,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 
 			buffer := &bytes.Buffer{}
 			if err := gob.NewEncoder(buffer).Encode(key); err != nil {
-				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
+				sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
 				continue
 			}
 			byteKey := buffer.Bytes()
@@ -158,7 +152,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 			// this helps in implementing incremental syncing.
 			recPosition, err := s.writePosition(offset)
 			if err != nil {
-				sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
+				sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
 				continue
 			}
 
@@ -169,14 +163,10 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 				Position:  recPosition}
 
 			// select statement to make sure channel was not closed by teardown stage
-			select {
-			case <-s.iteratorClosed:
-				sdk.Logger(s.ctx).Trace().Msg("recieved closed channel")
+			if s.iteratorClosed {
+				sdk.Logger(ctx).Trace().Msg("recieved closed channel")
 				return nil
-			default:
-				sdk.Logger(s.ctx).Trace().Msg("iterator running")
 			}
-
 			s.records <- record
 		}
 	}
@@ -222,7 +212,7 @@ func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
-func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (it *bigquery.RowIterator, err error) {
+func (s *Source) getRowIterator(ctx context.Context, offset string, tableID string, firstSync bool) (it *bigquery.RowIterator, err error) {
 	// check for config `IncrementColNames`. User can provide the column name which
 	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
 
@@ -246,31 +236,30 @@ func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (
 			" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + offset
 	}
 
-	fmt.Println("query: ", query)
 	q := s.bqReadClient.Query(query)
-	sdk.Logger(s.ctx).Trace().Str("q ", q.Q)
+	sdk.Logger(ctx).Trace().Str("q ", q.Q)
 	q.Location = s.sourceConfig.Config.Location
 
-	job, err := q.Run(s.ctx)
+	job, err := q.Run(ctx)
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running the job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running the job")
 		return it, err
 	}
 
-	status, err := job.Wait(s.ctx)
+	status, err := job.Wait(ctx)
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
 	}
 
 	if err := status.Err(); err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
 	}
 
-	it, err = job.Read(s.ctx)
+	it, err = job.Read(ctx)
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
 	}
 	return it, err
@@ -301,11 +290,10 @@ func fetchPos(s *Source, pos sdk.Position) {
 
 func (s *Source) runIterator() (err error) {
 	// Snapshot sync. Start were we left last
-
-	rowInput := readRowInput{offset: s.position, positions: s.position}
-	err = s.ReadGoogleRow(rowInput, s.records)
+	ctx := s.ctx
+	err = s.ReadGoogleRow(ctx)
 	if err != nil {
-		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while reading google row.")
+		sdk.Logger(ctx).Trace().Str("err", err.Error()).Msg("error found while reading google row.")
 		return err
 	}
 
@@ -314,19 +302,18 @@ func (s *Source) runIterator() (err error) {
 		case <-s.tomb.Dying():
 			return s.tomb.Err()
 		case <-s.ticker.C:
-			sdk.Logger(s.ctx).Trace().Msg("ticker started ")
-			err = runCDCIterator(s, rowInput)
+			sdk.Logger(ctx).Trace().Msg("ticker started ")
+			err = runCDCIterator(ctx, s)
 			if err != nil {
-				sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("error found %v", err))
+				sdk.Logger(ctx).Trace().Msg(fmt.Sprintf("error found %v", err))
 				return
 			}
 		}
 	}
 }
 
-func runCDCIterator(s *Source, rowInput readRowInput) (err error) {
-	rowInput = readRowInput{offset: s.position, positions: s.position}
-	sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.sourceConfig.Config.TableID, s.position))
-	err = s.ReadGoogleRow(rowInput, s.records)
+func runCDCIterator(ctx context.Context, s *Source) (err error) {
+	sdk.Logger(ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.sourceConfig.Config.TableID, s.position))
+	err = s.ReadGoogleRow(ctx)
 	return
 }

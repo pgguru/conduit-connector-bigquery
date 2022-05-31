@@ -41,7 +41,7 @@ type Source struct {
 	position       string
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
-	iteratorClosed chan bool
+	iteratorClosed bool
 }
 
 func NewSource() sdk.Source {
@@ -69,12 +69,13 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	// s.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
 	s.records = make(chan sdk.Record, 100)
-	s.iteratorClosed = make(chan bool, 2)
+
+	s.iteratorClosed = false
 
 	if len(s.sourceConfig.Config.PollingTime) > 0 {
 		pollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime)
 		if err != nil {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
+			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
 			return errors.New("invalid polling time duration provided")
 		}
 	}
@@ -82,9 +83,9 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.ticker = time.NewTicker(pollingTime)
 	s.tomb = &tomb.Tomb{}
 
-	client, err := newClient(s.tomb.Context(s.ctx), s.sourceConfig.Config.ProjectID, option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount))
+	client, err := newClient(ctx, s.sourceConfig.Config.ProjectID, option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount))
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
 		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
 		s.tomb.Kill(clientErr)
 		return fmt.Errorf("bigquery.NewClient: %v", err)
@@ -115,10 +116,8 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	if len(s.iteratorClosed) > 0 {
-		fmt.Println("got close")
-		s.iteratorClosed <- true
-	}
+	s.iteratorClosed = true
+
 	if s.records != nil {
 		close(s.records)
 	}
