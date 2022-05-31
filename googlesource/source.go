@@ -32,7 +32,7 @@ type Source struct {
 	bqReadClient *bigquery.Client
 	sourceConfig googlebigquery.SourceConfig
 	// table to be synced
-	table string
+	// table string
 	// do we need Ctx? we have it in all the methods as a param
 	// Neha: for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
@@ -115,6 +115,10 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
+	if len(s.iteratorClosed) > 0 {
+		fmt.Println("got close")
+		s.iteratorClosed <- true
+	}
 	if s.records != nil {
 		close(s.records)
 	}

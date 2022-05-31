@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -35,14 +34,12 @@ var (
 )
 
 type readRowInput struct {
-	tableID   string
 	offset    string
 	positions string
-	wg        *sync.WaitGroup
 }
 
 // checkInitialPos helps in creating the query to fetch data from endpoint
-func (s *Source) checkInitialPos(positions string, incrementColName string, tableID string, primaryColName string) (firstSync, userDefinedOffset bool, userDefinedKey bool) {
+func (s *Source) checkInitialPos(positions, incrementColName, primaryColName string) (firstSync, userDefinedOffset, userDefinedKey bool) {
 	// if its the firstSync no offset is applied
 	if positions == "" {
 		firstSync = true
@@ -58,22 +55,21 @@ func (s *Source) checkInitialPos(positions string, incrementColName string, tabl
 		userDefinedKey = true
 	}
 
-	return firstSync, userDefinedOffset, userDefinedKey
+	return
 }
 
+// ReadGoogleRow fetches data from endpoint. It creates sdk.record and puts it in response channel
 func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record) (err error) {
 	sdk.Logger(s.ctx).Trace().Msg("Inside read google row")
 	var userDefinedOffset, userDefinedKey bool
 	var firstSync bool
 
-	offset := rowInput.offset
-	tableID := s.table
-	wg := rowInput.wg
+	offset := s.position
+	tableID := s.sourceConfig.Config.TableID
 
-	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(rowInput.positions, s.sourceConfig.Config.IncrementColNames, tableID, s.sourceConfig.Config.PrimaryKeyColNames)
+	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(s.position, s.sourceConfig.Config.IncrementColName, s.sourceConfig.Config.PrimaryKeyColName)
 	lastRow := false
 
-	defer wg.Done()
 	for {
 		// Keep on reading till end of table
 		sdk.Logger(s.ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
@@ -92,14 +88,6 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 
 		for {
 			var row []bigquery.Value
-			// select statement to make sure channel was not closed by teardown stage
-			select {
-			case <-s.iteratorClosed:
-				sdk.Logger(s.ctx).Trace().Msg("recieved closed channel")
-				return nil
-			default:
-				sdk.Logger(s.ctx).Trace().Msg("iterator running")
-			}
 
 			err := it.Next(&row)
 			schema := it.Schema
@@ -136,7 +124,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedOffset {
-					if schema[i].Name == s.sourceConfig.Config.IncrementColNames {
+					if schema[i].Name == s.sourceConfig.Config.IncrementColName {
 						offset = fmt.Sprint(data[schema[i].Name])
 						offset = getType(schema[i].Type, offset)
 					}
@@ -150,7 +138,7 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedKey {
-					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColNames {
+					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColName {
 						key = fmt.Sprintf("%v", data[schema[i].Name])
 					}
 				}
@@ -180,7 +168,16 @@ func (s *Source) ReadGoogleRow(rowInput readRowInput, responseCh chan sdk.Record
 				Key:       sdk.RawData(byteKey),
 				Position:  recPosition}
 
-			responseCh <- record
+			// select statement to make sure channel was not closed by teardown stage
+			select {
+			case <-s.iteratorClosed:
+				sdk.Logger(s.ctx).Trace().Msg("recieved closed channel")
+				return nil
+			default:
+				sdk.Logger(s.ctx).Trace().Msg("iterator running")
+			}
+
+			s.records <- record
 		}
 	}
 	return
@@ -230,8 +227,8 @@ func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (
 	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
 
 	var query string
-	if len(s.sourceConfig.Config.IncrementColNames) > 0 {
-		columnName := s.sourceConfig.Config.IncrementColNames
+	if len(s.sourceConfig.Config.IncrementColName) > 0 {
+		columnName := s.sourceConfig.Config.IncrementColName
 		if firstSync {
 			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
 				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
@@ -248,17 +245,19 @@ func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (
 		query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
 			" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + offset
 	}
+
+	fmt.Println("query: ", query)
 	q := s.bqReadClient.Query(query)
 	sdk.Logger(s.ctx).Trace().Str("q ", q.Q)
 	q.Location = s.sourceConfig.Config.Location
 
-	job, err := q.Run(s.tomb.Context(s.ctx))
+	job, err := q.Run(s.ctx)
 	if err != nil {
 		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running the job")
 		return it, err
 	}
 
-	status, err := job.Wait(s.tomb.Context(s.ctx))
+	status, err := job.Wait(s.ctx)
 	if err != nil {
 		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
@@ -269,7 +268,7 @@ func (s *Source) getRowIterator(offset string, tableID string, firstSync bool) (
 		return it, err
 	}
 
-	it, err = job.Read(s.tomb.Context(s.ctx))
+	it, err = job.Read(s.ctx)
 	if err != nil {
 		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
@@ -300,33 +299,15 @@ func fetchPos(s *Source, pos sdk.Position) {
 	}
 }
 
-func getTables(s *Source) (err error) {
-	if s.sourceConfig.Config.TableIDs == "" {
-		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
-		return fmt.Errorf("table ID blank")
-	}
-	s.table = s.sourceConfig.Config.TableIDs
-	return err
-}
-
 func (s *Source) runIterator() (err error) {
-	var wg sync.WaitGroup
+	// Snapshot sync. Start were we left last
 
-	if err = getTables(s); err != nil {
-		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
+	rowInput := readRowInput{offset: s.position, positions: s.position}
+	err = s.ReadGoogleRow(rowInput, s.records)
+	if err != nil {
+		sdk.Logger(s.ctx).Trace().Str("err", err.Error()).Msg("error found while reading google row.")
 		return err
 	}
-
-	// Snapshot sync. Start were we left last
-	wg.Add(1)
-
-	rowInput := readRowInput{offset: s.position, positions: s.position, wg: &wg}
-	s.tomb.Go(func() (err error) {
-		sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.table, s.position))
-		return s.ReadGoogleRow(rowInput, s.records)
-	})
-
-	wg.Wait()
 
 	for {
 		select {
@@ -334,22 +315,18 @@ func (s *Source) runIterator() (err error) {
 			return s.tomb.Err()
 		case <-s.ticker.C:
 			sdk.Logger(s.ctx).Trace().Msg("ticker started ")
-			runCDCIterator(s, rowInput)
+			err = runCDCIterator(s, rowInput)
+			if err != nil {
+				sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("error found %v", err))
+				return
+			}
 		}
 	}
 }
 
-func runCDCIterator(s *Source, rowInput readRowInput) {
-	// wait group make sure that we start new iteration only
-	//  after the first iteration is completely done.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	rowInput = readRowInput{tableID: s.table, offset: s.position, positions: s.position, wg: &wg}
-
-	s.tomb.Go(func() (err error) {
-		sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.table, s.position))
-		return s.ReadGoogleRow(rowInput, s.records)
-	})
-
-	wg.Wait()
+func runCDCIterator(s *Source, rowInput readRowInput) (err error) {
+	rowInput = readRowInput{offset: s.position, positions: s.position}
+	sdk.Logger(s.ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.sourceConfig.Config.TableID, s.position))
+	err = s.ReadGoogleRow(rowInput, s.records)
+	return
 }

@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -31,8 +30,10 @@ import (
 )
 
 var (
-	serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
-	projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
+	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" // eg, export SERVICE_ACCOUNT = "path_to_file"
+	projectID      = "conduit-connectors"
+	// serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
+	// projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
 	datasetID        = "conduit_test_dataset"
 	tableID          = "conduit_test_table"
 	tableIDTimeStamp = "conduit_test_table_time_stamp"
@@ -253,14 +254,18 @@ func TestSuccessTimeIncremental(t *testing.T) {
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		fmt.Println("error: ", err)
 	}
 	time.Sleep(15 * time.Second)
 	for {
+
 		_, err := src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
-			fmt.Println(err)
+		if err != nil && err == sdk.ErrBackoffRetry {
+			fmt.Println("Error: ", err)
 			break
+		}
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
 		}
 	}
 
@@ -422,15 +427,19 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		fmt.Println("error: ", err)
 	}
 	time.Sleep(15 * time.Second)
 	for i := 0; i <= 4; i++ {
-		_, err := src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
+		r, err := src.Read(ctx)
+		if err != nil && err == sdk.ErrBackoffRetry {
 			fmt.Println(err)
 			break
 		}
+		if err != nil || ctx.Err() != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		fmt.Printf("%v \n", r.Position)
 	}
 
 	err = src.Teardown(ctx)

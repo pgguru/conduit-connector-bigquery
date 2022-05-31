@@ -49,14 +49,14 @@ const (
 
 // Config represents configuration needed for S3
 type Config struct {
-	ProjectID          string
-	DatasetID          string
-	TableIDs           string
-	ServiceAccount     string
-	Location           string
-	PollingTime        string
-	IncrementColNames  string // IncrementColName is incrementing column name. This is used as offset
-	PrimaryKeyColNames string // PrimaryKeyColName is primary key column. This is used as primary key
+	ProjectID         string
+	DatasetID         string
+	TableID           string
+	ServiceAccount    string
+	Location          string
+	PollingTime       string
+	IncrementColName  string // IncrementColName is incrementing column name. This is used as offset
+	PrimaryKeyColName string // PrimaryKeyColName is primary key column. This is used as primary key
 }
 
 var (
@@ -102,14 +102,14 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 	}
 
 	config := Config{
-		ServiceAccount:     cfg[ConfigServiceAccount],
-		ProjectID:          cfg[ConfigProjectID],
-		DatasetID:          cfg[ConfigDatasetID],
-		TableIDs:           cfg[ConfigTableID],
-		Location:           cfg[ConfigLocation],
-		PollingTime:        cfg[ConfigPollingTime],
-		IncrementColNames:  cfg[ConfigIncrementalColName],
-		PrimaryKeyColNames: cfg[ConfigPrimaryKeyColName]}
+		ServiceAccount:    cfg[ConfigServiceAccount],
+		ProjectID:         cfg[ConfigProjectID],
+		DatasetID:         cfg[ConfigDatasetID],
+		TableID:           cfg[ConfigTableID],
+		Location:          cfg[ConfigLocation],
+		PollingTime:       cfg[ConfigPollingTime],
+		IncrementColName:  cfg[ConfigIncrementalColName],
+		PrimaryKeyColName: cfg[ConfigPrimaryKeyColName]}
 
 	return SourceConfig{
 		Config: config,
