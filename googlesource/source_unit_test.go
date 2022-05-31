@@ -44,7 +44,7 @@ func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
 func TestSuccessfulTearDown(t *testing.T) {
 	err := dataSetup(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 
@@ -83,7 +83,7 @@ func TestSuccessfulTearDown(t *testing.T) {
 func TestMultipleTables(t *testing.T) {
 	err := dataSetup(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
@@ -232,7 +232,7 @@ func TestInvalid(t *testing.T) {
 func TestInvalidOrderByName(t *testing.T) {
 	err := dataSetup(t)
 	if err != nil {
-		t.Log("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
