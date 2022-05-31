@@ -42,15 +42,15 @@ func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
 }
 
 func TestSuccessfulTearDown(t *testing.T) {
-	err := dataSetup()
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Log("Could not create values. Err: ", err)
 		return
 	}
 
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID, tableID2})
+		t.Log("Got error while cleanup. Err: ", err)
 	}()
 
 	src := Source{}
@@ -81,14 +81,14 @@ func TestSuccessfulTearDown(t *testing.T) {
 }
 
 func TestMultipleTables(t *testing.T) {
-	err := dataSetup()
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Log("Could not create values. Err: ", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID, tableID2})
+		t.Log("Got error while cleanup. Err: ", err)
 	}()
 
 	src := Source{}
@@ -138,13 +138,13 @@ func TestInvalidCreds(t *testing.T) {
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err == nil {
-		fmt.Println("we should get error in read")
+		t.Log("we should get error in read")
 	}
 	time.Sleep(10 * time.Second)
 	for {
 		_, err := src.Read(ctx)
 		if err != nil {
-			fmt.Println("got the expected error. Err: ", err)
+			t.Log("got the expected error. Err: ", err)
 			break
 		}
 		if err == nil {
@@ -209,7 +209,7 @@ func TestInvalid(t *testing.T) {
 
 	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: fmt.Sprintf("%d", 46)})
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
 
 	err = src.Open(ctx, pos)
@@ -230,14 +230,14 @@ func TestInvalid(t *testing.T) {
 }
 
 func TestInvalidOrderByName(t *testing.T) {
-	err := dataSetup()
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Log("Could not create values. Err: ", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID, tableID2})
+		t.Log("Got error while cleanup. Err: ", err)
 	}()
 
 	src := Source{}
@@ -252,7 +252,7 @@ func TestInvalidOrderByName(t *testing.T) {
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err == nil {
-		fmt.Println("expected error. got null")
+		t.Log("expected error. got null")
 		t.Errorf("some other error found: %v", err)
 	}
 }
