@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"testing"
@@ -146,15 +147,18 @@ func dataSetupWithTimestamp(t *testing.T) (err error) {
 		job, err := q.Run(ctx)
 		if err != nil {
 			t.Log("Error found: ", err)
+			return err
 		}
 
 		status, err := job.Wait(ctx)
 		if err != nil {
 			t.Log("Error found: ", err)
+			return err
 		}
 
-		if err := status.Err(); err != nil {
+		if err = status.Err(); err != nil {
 			t.Log("Error found: ", err)
+			return err
 		}
 	}
 
@@ -179,15 +183,18 @@ func dataUpdationWithTimestamp(t *testing.T) {
 	job, err := q.Run(ctx)
 	if err != nil {
 		t.Log("Error found: ", err)
+		return
 	}
 
 	status, err := job.Wait(ctx)
 	if err != nil {
 		t.Log("Error found: ", err)
+		return
 	}
 
 	if err := status.Err(); err != nil {
 		t.Log("Error found: ", err)
+		return
 	}
 }
 
@@ -213,7 +220,8 @@ func cleanupDataset(t *testing.T, tables []string) (err error) {
 	}
 
 	if err = client.Dataset(datasetID).Delete(ctx); err != nil {
-		t.Log("Error in delete: ", err)
+		// dataset could already be in use. it is okay if it does not get deleted
+		log.Println("Error in delete: ", err)
 		return err
 	}
 	return err
@@ -441,7 +449,7 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 	}
 	time.Sleep(15 * time.Second)
 	for i := 0; i <= 4; i++ {
-		_, err := src.Read(ctx)
+		r, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			t.Log(err)
 			break
@@ -449,6 +457,7 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 		if err != nil || ctx.Err() != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
+		fmt.Printf("%s", r.Payload.Bytes())
 	}
 
 	err = src.Teardown(ctx)

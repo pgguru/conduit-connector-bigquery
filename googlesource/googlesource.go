@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -49,15 +50,21 @@ func (s *Source) checkInitialPos(positions, incrementColName, primaryColName str
 	return
 }
 
+func (s *Source) getPosition() string {
+	s.position.lock.Lock()
+	defer s.position.lock.Unlock()
+	return s.position.positions
+}
+
 // ReadGoogleRow fetches data from endpoint. It creates sdk.record and puts it in response channel
 func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 	sdk.Logger(ctx).Trace().Msg("Inside read google row")
 	var userDefinedOffset, userDefinedKey, firstSync bool
 
-	offset := s.position
+	offset := s.getPosition()
 	tableID := s.sourceConfig.Config.TableID
 
-	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(s.position, s.sourceConfig.Config.IncrementColName, s.sourceConfig.Config.PrimaryKeyColName)
+	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(s.getPosition(), s.sourceConfig.Config.IncrementColName, s.sourceConfig.Config.PrimaryKeyColName)
 	lastRow := false
 
 	for {
@@ -203,8 +210,10 @@ func getType(fieldType bigquery.FieldType, offset string) string {
 
 // writePosition prevents race condition happening while using map inside goroutine
 func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
-	s.position = offset
-	return json.Marshal(&s.position)
+	s.position.lock.Lock()
+	defer s.position.lock.Unlock()
+	s.position.positions = offset
+	return json.Marshal(&s.position.positions)
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
@@ -276,9 +285,12 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 }
 
 func fetchPos(s *Source, pos sdk.Position) {
-	s.position = ""
+	s.position.lock = new(sync.Mutex)
+	s.position.lock.Lock()
+	defer s.position.lock.Unlock()
+	s.position.positions = ""
 
-	err := json.Unmarshal(pos, &s.position)
+	err := json.Unmarshal(pos, &s.position.positions)
 	if err != nil {
 		sdk.Logger(s.ctx).Info().Msg("Could not get position. Will start with offset 0")
 	}
