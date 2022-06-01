@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -29,10 +30,8 @@ import (
 )
 
 var (
-	serviceAccount = "/home/nehagupta/Downloads/conduit-connectors-cf3466b16662.json" // eg, export SERVICE_ACCOUNT = "path_to_file"
-	projectID      = "conduit-connectors"
-	// serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
-	// projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
+	serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
+	projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
 	datasetID        = "conduit_test_dataset"
 	tableID          = "conduit_test_table"
 	tableID2         = "conduit_test_table_2"

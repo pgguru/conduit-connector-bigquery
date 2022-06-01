@@ -16,10 +16,17 @@ jobs:
         with:
           go-version: 1.17
 
+      - name: 'Create env file'
+        run: |
+             touch .service_account
+             echo ${SERVICE_ACCOUNT}  >> .service_account
+        shell: bash
+        env:
+          SERVICE_ACCOUNT: ${{secrets.GOOGLE_SERVICE_ACCOUNT}}
+      
       - name: Test
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
-          AWS_S3_BUCKET: conduit-s3-testing
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          GOOGLE_PROJECT_ID: .service_account
+          GOOGLE_PROJECT_LOCATION: US
         run: make test GOTEST_FLAGS="-v -count=1"
