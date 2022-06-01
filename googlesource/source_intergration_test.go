@@ -42,7 +42,7 @@ var (
 func dataSetup(t *testing.T) (err error) {
 	ctx := context.Background()
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -56,7 +56,7 @@ func dataSetup(t *testing.T) (err error) {
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
 	}
-	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -100,7 +100,7 @@ type Item struct {
 func dataSetupWithTimestamp(t *testing.T) (err error) {
 	ctx := context.Background()
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -164,7 +164,7 @@ func dataSetupWithTimestamp(t *testing.T) (err error) {
 func dataUpdationWithTimestamp(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		t.Log("Error found: ", err)
 	}
@@ -193,7 +193,7 @@ func dataUpdationWithTimestamp(t *testing.T) {
 
 func cleanupDataset(t *testing.T, tables []string) (err error) {
 	ctx := context.Background()
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -207,7 +207,7 @@ func cleanupDataset(t *testing.T, tables []string) (err error) {
 		}
 	}
 
-	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
