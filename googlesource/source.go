@@ -70,7 +70,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	}
 
 	s.sourceConfig = sourceConfig
-	s.clientType = &client{ctx: ctx, projectID: s.sourceConfig.Config.ProjectID, opts: []option.ClientOption{option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount)}}
+	s.clientType = &client{ctx: ctx, projectID: s.sourceConfig.Config.ProjectID, opts: []option.ClientOption{option.WithCredentialsJSON([]byte(s.sourceConfig.Config.ServiceAccount))}}
 	return nil
 }
 
