@@ -29,10 +29,6 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-var (
-	newClient = bigquery.NewClient
-)
-
 // checkInitialPos helps in creating the query to fetch data from endpoint
 func (s *Source) checkInitialPos(positions, incrementColName, primaryColName string) (firstSync, userDefinedOffset, userDefinedKey bool) {
 	// if its the firstSync no offset is applied
@@ -303,17 +299,11 @@ func (s *Source) runIterator() (err error) {
 			return s.tomb.Err()
 		case <-s.ticker.C:
 			sdk.Logger(ctx).Trace().Msg("ticker started ")
-			err = runCDCIterator(ctx, s)
+			err = s.ReadGoogleRow(ctx)
 			if err != nil {
 				sdk.Logger(ctx).Trace().Msg(fmt.Sprintf("error found %v", err))
 				return
 			}
 		}
 	}
-}
-
-func runCDCIterator(ctx context.Context, s *Source) (err error) {
-	sdk.Logger(ctx).Trace().Msg(fmt.Sprintf("position %v : %v", s.sourceConfig.Config.TableID, s.position))
-	err = s.ReadGoogleRow(ctx)
-	return
 }
