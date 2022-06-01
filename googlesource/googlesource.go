@@ -31,10 +31,6 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-var (
-	newClient = bigquery.NewClient
-)
-
 type readRowInput struct {
 	tableID   string
 	offset    string
@@ -95,14 +91,6 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 
 		for {
 			var row []bigquery.Value
-			// select statement to make sure channel was not closed by teardown stage
-			select {
-			case <-s.iteratorClosed:
-				sdk.Logger(s.ctx).Trace().Msg("recieved closed channel")
-				return nil
-			default:
-				sdk.Logger(s.ctx).Trace().Msg("iterator running")
-			}
 
 			err := it.Next(&row)
 			schema := it.Schema
@@ -188,6 +176,12 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 				Payload:   data,
 				Key:       sdk.RawData(byteKey),
 				Position:  recPosition}
+
+			// select statement to make sure channel was not closed by teardown stage
+			if s.iteratorClosed {
+				sdk.Logger(s.ctx).Trace().Msg("recieved closed channel")
+				return nil
+			}
 
 			responseCh <- record
 		}

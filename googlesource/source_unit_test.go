@@ -25,7 +25,6 @@ import (
 	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
-	"google.golang.org/api/option"
 	"gopkg.in/tomb.v2"
 )
 
@@ -50,7 +49,9 @@ func TestSuccessfulTearDown(t *testing.T) {
 
 	defer func() {
 		err := cleanupDataset(t, []string{tableID, tableID2})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -88,7 +89,9 @@ func TestMultipleTables(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableID, tableID2})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -182,16 +185,15 @@ func TestNextContextDone(t *testing.T) {
 	}
 }
 
+type mockClient struct {
+}
+
+func (client *mockClient) Client() (*bigquery.Client, error) {
+	return nil, fmt.Errorf("mock error")
+}
+
 func TestInvalid(t *testing.T) {
 	googlebigquery.PollingTime = time.Second * 1
-	tmpClient := newClient
-	defer func() {
-		newClient = tmpClient
-	}()
-
-	newClient = func(ctx context.Context, projectID string, opts ...option.ClientOption) (*bigquery.Client, error) {
-		return nil, fmt.Errorf("mock")
-	}
 
 	src := Source{}
 	cfg := map[string]string{}
@@ -211,7 +213,7 @@ func TestInvalid(t *testing.T) {
 	if err != nil {
 		t.Log(err)
 	}
-
+	src.clientType = &mockClient{}
 	err = src.Open(ctx, pos)
 	if err == nil {
 		t.Errorf("expected error, got %v", err)
@@ -237,7 +239,9 @@ func TestInvalidOrderByName(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableID, tableID2})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}

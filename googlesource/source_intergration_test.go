@@ -58,7 +58,6 @@ func dataSetup(t *testing.T) (err error) {
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
 	}
-	t.Log("Dataset created")
 	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
@@ -134,9 +133,9 @@ func dataSetupWithTimestamp(t *testing.T) (err error) {
 
 	// create dataset
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
+		t.Log("Dataset could not be created created")
 		return err
 	}
-	t.Log("Dataset created")
 
 	sampleSchema := bigquery.Schema{
 		{Name: "name", Type: bigquery.StringFieldType},
@@ -150,8 +149,8 @@ func dataSetupWithTimestamp(t *testing.T) (err error) {
 	}
 	tableRef := client.Dataset(datasetID).Table(tableIDTimeStamp)
 	err = tableRef.Create(ctx, metaData)
-	t.Log("Error: ", err)
 	if err != nil && !strings.Contains(err.Error(), "duplicate") {
+		t.Log("Error: ", err)
 		return err
 	}
 
@@ -249,7 +248,9 @@ func TestSuccessTimeIncremental(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableIDTimeStamp})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -277,20 +278,12 @@ func TestSuccessTimeIncremental(t *testing.T) {
 	}
 	time.Sleep(15 * time.Second)
 	for {
-		record, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil || ctx.Err() != nil {
 			t.Log(err)
 			break
 		}
 
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		t.Log(" :", value)
-
-		value = string(record.Key.Bytes())
-		t.Log("Key :", value)
 	}
 
 	err = src.Teardown(ctx)
@@ -307,7 +300,9 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableIDTimeStamp})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -343,6 +338,9 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 			t.Log(err)
 			break
 		}
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
 
 	}
 
@@ -377,7 +375,9 @@ func TestSuccessPrimaryKey(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableIDTimeStamp})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -406,9 +406,12 @@ func TestSuccessPrimaryKey(t *testing.T) {
 	time.Sleep(15 * time.Second)
 	for {
 		_, err = src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
+		if err != nil && err == sdk.ErrBackoffRetry {
 			t.Log(err)
 			break
+		}
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
 		}
 
 	}
@@ -427,7 +430,9 @@ func TestSuccessfulGet(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableID, tableID2})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -459,9 +464,11 @@ func TestSuccessfulGet(t *testing.T) {
 	time.Sleep(15 * time.Second)
 	for i := 0; i <= 4; i++ {
 		_, err := src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
-			t.Log(err)
+		if err != nil && err == sdk.ErrBackoffRetry {
 			break
+		}
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
 		}
 
 	}
@@ -480,7 +487,9 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableID, tableID2})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -511,7 +520,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	for {
 		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			t.Log("err: ", err)
 			break
 		}
 		if err != nil {
@@ -533,7 +541,9 @@ func TestSuccessfulOrderByName(t *testing.T) {
 	}
 	defer func() {
 		err := cleanupDataset(t, []string{tableID, tableID2})
-		t.Log("Got error while cleanup. Err: ", err)
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -564,7 +574,6 @@ func TestSuccessfulOrderByName(t *testing.T) {
 	for {
 		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			t.Log("err: ", err)
 			break
 		}
 		if err != nil {
