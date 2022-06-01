@@ -39,8 +39,24 @@ type Source struct {
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
 	iteratorClosed bool
+	// interface to provide BigQuery client. In testing this will be used to mock the client
+	clientType clientI
 }
 
+// clientI provides function to create BigQuery Client
+type clientI interface {
+	Client() (*bigquery.Client, error)
+}
+
+type client struct {
+	ctx       context.Context
+	projectID string
+	opts      []option.ClientOption
+}
+
+func (client *client) Client() (*bigquery.Client, error) {
+	return bigquery.NewClient(client.ctx, client.projectID, client.opts...)
+}
 func NewSource() sdk.Source {
 	return &Source{}
 }
@@ -54,6 +70,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	}
 
 	s.sourceConfig = sourceConfig
+	s.clientType = &client{ctx: ctx, projectID: s.sourceConfig.Config.ProjectID, opts: []option.ClientOption{option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount)}}
 	return nil
 }
 
@@ -66,7 +83,6 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	// s.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
 	s.records = make(chan sdk.Record, 100)
-
 	s.iteratorClosed = false
 
 	if len(s.sourceConfig.Config.PollingTime) > 0 {
@@ -79,8 +95,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 
 	s.ticker = time.NewTicker(pollingTime)
 	s.tomb = &tomb.Tomb{}
-
-	client, err := newClient(ctx, s.sourceConfig.Config.ProjectID, option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount))
+	client, err := s.clientType.Client()
 	if err != nil {
 		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
 		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
@@ -126,6 +141,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 }
 
 func (s *Source) StopIterator() error {
+	s.iteratorClosed = true
 	if s.bqReadClient != nil {
 		err := s.bqReadClient.Close()
 		if err != nil {
