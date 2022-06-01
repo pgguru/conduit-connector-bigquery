@@ -20,7 +20,7 @@ Run `make build` to build the connector.
 ### Configuration
 | name |  description | required | default value |
 |------|--------------|----------|---------------|
-|`serviceAccount`|Path to service account file with access to project. ref: https://cloud.google.com/docs/authentication/getting-started|true| - |
+|`serviceAccount`| service account with access to project. ref: https://cloud.google.com/docs/authentication/getting-started|true| - |
 |`projectID`| The Project ID on endpoint|true| - |
 |`datasetID`|The dataset ID to pull data from.|true| - |
 |`tableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|all tables in dataset|
@@ -56,7 +56,7 @@ Sample payload-
 
 ### Testing
 Run `make test` to run all the unit tests. To run the test cases export environment variable - `GOOGLE_SERVICE_ACCOUNT` and `GOOGLE_PROJECT_ID` where,
-- `GOOGLE_SERVICE_ACCOUNT` is the path to the google service account file.  refer: https://cloud.google.com/docs/authentication/getting-started to create a service account
+- `GOOGLE_SERVICE_ACCOUNT` is the value in google service account file.  refer: https://cloud.google.com/docs/authentication/getting-started to create a service account
 - `GOOGLE_PROJECT_ID` is  the ID of projects whose tables data is to be synced
 
 ### Known Issues & Limitations
