@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -33,14 +34,20 @@ type Source struct {
 	sourceConfig googlebigquery.SourceConfig
 	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
-	ctx            context.Context
-	records        chan sdk.Record
-	position       string
+	ctx     context.Context
+	records chan sdk.Record
+	// position faces race condition. So will always use it inside lock
+	position       position
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
 	iteratorClosed bool
 	// interface to provide BigQuery client. In testing this will be used to mock the client
 	clientType clientI
+}
+
+type position struct {
+	lock      *sync.Mutex
+	positions string
 }
 
 // clientI provides function to create BigQuery Client
