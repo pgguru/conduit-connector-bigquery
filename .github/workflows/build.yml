@@ -15,10 +15,10 @@ jobs:
         uses: actions/setup-go@v3
         with:
           go-version: 1.17
-
+    
       - name: Test
         env:
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           GOOGLE_PROJECT_ID: ${{ secrets.GOOGLE_PROJECT_ID }}
           GOOGLE_PROJECT_LOCATION: US
-        run: make test GOTEST_FLAGS="-v -count=1"
+        run: make test GOTEST_FLAGS=" -count=1"

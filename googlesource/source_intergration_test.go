@@ -449,7 +449,7 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 	}
 	time.Sleep(15 * time.Second)
 	for i := 0; i <= 4; i++ {
-		r, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
 			t.Log(err)
 			break
@@ -457,7 +457,6 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 		if err != nil || ctx.Err() != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
-		fmt.Printf("%s", r.Payload.Bytes())
 	}
 
 	err = src.Teardown(ctx)
