@@ -340,7 +340,6 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
-
 	}
 
 	// check updated
@@ -357,7 +356,6 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 			t.Log(err)
 			break
 		}
-
 	}
 
 	err = src.Teardown(ctx)
