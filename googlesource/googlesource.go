@@ -29,6 +29,7 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 )
 
 type readRowInput struct {
@@ -36,6 +37,21 @@ type readRowInput struct {
 	offset    string
 	positions map[string]string
 	wg        *sync.WaitGroup
+}
+
+// clientI provides function to create BigQuery Client
+type clientI interface {
+	Client() (*bigquery.Client, error)
+}
+
+type client struct {
+	ctx       context.Context
+	projectID string
+	opts      []option.ClientOption
+}
+
+func (client *client) Client() (*bigquery.Client, error) {
+	return bigquery.NewClient(client.ctx, client.projectID, client.opts...)
 }
 
 // checkInitialPos helps in creating the query to fetch data from endpoint
