@@ -44,7 +44,7 @@ type Source struct {
 	tomb           *tomb.Tomb
 	iteratorClosed bool
 	// interface to provide BigQuery client. In testing this will be used to mock the client
-	clientType clientI
+	clientType clientFactory
 }
 
 // positions struct to maintain syncing status of tables

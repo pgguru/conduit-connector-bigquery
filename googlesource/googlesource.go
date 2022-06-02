@@ -39,8 +39,8 @@ type readRowInput struct {
 	wg        *sync.WaitGroup
 }
 
-// clientI provides function to create BigQuery Client
-type clientI interface {
+// clientFactory provides function to create BigQuery Client
+type clientFactory interface {
 	Client() (*bigquery.Client, error)
 }
 
