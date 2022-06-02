@@ -50,20 +50,6 @@ type position struct {
 	positions string
 }
 
-// clientI provides function to create BigQuery Client
-type clientI interface {
-	Client() (*bigquery.Client, error)
-}
-
-type client struct {
-	ctx       context.Context
-	projectID string
-	opts      []option.ClientOption
-}
-
-func (client *client) Client() (*bigquery.Client, error) {
-	return bigquery.NewClient(client.ctx, client.projectID, client.opts...)
-}
 func NewSource() sdk.Source {
 	return &Source{}
 }
