@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -47,19 +46,19 @@ func (client *client) Client() (*bigquery.Client, error) {
 }
 
 // checkInitialPos helps in creating the query to fetch data from endpoint
-func (s *Source) checkInitialPos(positions, incrementColName, primaryColName string) (firstSync, userDefinedOffset, userDefinedKey bool) {
+func (s *Source) checkInitialPos() (firstSync, userDefinedOffset, userDefinedKey bool) {
 	// if its the firstSync no offset is applied
-	if positions == "" {
+	if s.getPosition() == "" {
 		firstSync = true
 	}
 
 	// if incrementColName set - we orderBy the provided column name
-	if len(incrementColName) > 0 {
+	if len(s.sourceConfig.Config.IncrementColName) > 0 {
 		userDefinedOffset = true
 	}
 
 	// if primaryColName set - we orderBy the provided column name
-	if len(primaryColName) > 0 {
+	if len(s.sourceConfig.Config.PrimaryKeyColName) > 0 {
 		userDefinedKey = true
 	}
 
@@ -67,8 +66,8 @@ func (s *Source) checkInitialPos(positions, incrementColName, primaryColName str
 }
 
 func (s *Source) getPosition() string {
-	s.position.lock.Lock()
-	defer s.position.lock.Unlock()
+	// s.position.lock.Lock()
+	// defer s.position.lock.Unlock()
 	return s.position.positions
 }
 
@@ -80,7 +79,7 @@ func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 	offset := s.getPosition()
 	tableID := s.sourceConfig.Config.TableID
 
-	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos(s.getPosition(), s.sourceConfig.Config.IncrementColName, s.sourceConfig.Config.PrimaryKeyColName)
+	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos()
 	lastRow := false
 
 	for {
@@ -226,8 +225,8 @@ func getType(fieldType bigquery.FieldType, offset string) string {
 
 // writePosition prevents race condition happening while using map inside goroutine
 func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
-	s.position.lock.Lock()
-	defer s.position.lock.Unlock()
+	// s.position.lock.Lock()
+	// defer s.position.lock.Unlock()
 	s.position.positions = offset
 	return json.Marshal(&s.position.positions)
 }
@@ -301,9 +300,9 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 }
 
 func fetchPos(s *Source, pos sdk.Position) {
-	s.position.lock = new(sync.Mutex)
-	s.position.lock.Lock()
-	defer s.position.lock.Unlock()
+	// s.position.lock = new(sync.Mutex)
+	// s.position.lock.Lock()
+	// defer s.position.lock.Unlock()
 	s.position.positions = ""
 
 	err := json.Unmarshal(pos, &s.position.positions)
