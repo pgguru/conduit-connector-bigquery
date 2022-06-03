@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -46,7 +45,7 @@ type Source struct {
 }
 
 type position struct {
-	lock      *sync.Mutex
+	// lock      *sync.Mutex
 	positions string
 }
 
