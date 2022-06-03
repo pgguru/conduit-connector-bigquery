@@ -68,7 +68,7 @@ func (s *Source) checkInitialPos() (firstSync, userDefinedOffset, userDefinedKey
 func (s *Source) getPosition() string {
 	// s.position.lock.Lock()
 	// defer s.position.lock.Unlock()
-	return s.position.positions
+	return s.position
 }
 
 // ReadGoogleRow fetches data from endpoint. It creates sdk.record and puts it in response channel
@@ -227,8 +227,8 @@ func getType(fieldType bigquery.FieldType, offset string) string {
 func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
 	// s.position.lock.Lock()
 	// defer s.position.lock.Unlock()
-	s.position.positions = offset
-	return json.Marshal(&s.position.positions)
+	s.position = offset
+	return json.Marshal(&s.position)
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
@@ -303,9 +303,9 @@ func fetchPos(s *Source, pos sdk.Position) {
 	// s.position.lock = new(sync.Mutex)
 	// s.position.lock.Lock()
 	// defer s.position.lock.Unlock()
-	s.position.positions = ""
+	s.position = ""
 
-	err := json.Unmarshal(pos, &s.position.positions)
+	err := json.Unmarshal(pos, &s.position)
 	if err != nil {
 		sdk.Logger(s.ctx).Info().Msg("Could not get position. Will start with offset 0")
 	}

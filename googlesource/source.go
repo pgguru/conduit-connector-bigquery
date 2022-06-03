@@ -36,7 +36,7 @@ type Source struct {
 	ctx     context.Context
 	records chan sdk.Record
 	// position faces race condition. So will always use it inside lock
-	position       position
+	position       string
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
 	iteratorClosed bool
@@ -44,10 +44,10 @@ type Source struct {
 	clientType clientI
 }
 
-type position struct {
-	// lock      *sync.Mutex
-	positions string
-}
+// type position struct {
+// 	// lock      *sync.Mutex
+// 	positions string
+// }
 
 func NewSource() sdk.Source {
 	return &Source{}
