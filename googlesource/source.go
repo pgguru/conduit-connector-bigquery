@@ -32,14 +32,11 @@ type Source struct {
 	sdk.UnimplementedSource
 	bqReadClient *bigquery.Client
 	sourceConfig googlebigquery.SourceConfig
-	// if a user specified table IDs in the config, then the tables here will be those same table IDs.
-	//  However, if the table IDs in config are not specified, then the tables here will contain the list of all tables
-	tables []string
-	//  for all the function running in goroutine we needed the ctx value. To provide the current
+	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
 	ctx            context.Context
 	records        chan sdk.Record
-	positions      positions
+	position       position
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
 	iteratorClosed bool
@@ -47,17 +44,11 @@ type Source struct {
 	clientType clientFactory
 }
 
-// positions struct to maintain syncing status of tables
-type positions struct {
-	// position - map of tableIds and corresponding last position synced
-	positions map[string]string
-	// lock for goroutine safe access of position
-	lock *sync.Mutex
-}
-
-type Key struct {
-	TableID string
-	Offset  string
+// position faces race condition. So will always use it inside lock. Write and Read happens on same time.
+// Ref issue- https://github.com/neha-Gupta1/conduit-connector-bigquery/issues/26
+type position struct {
+	lock      *sync.Mutex
+	positions string
 }
 
 func NewSource() sdk.Source {
@@ -91,7 +82,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	if len(s.sourceConfig.Config.PollingTime) > 0 {
 		pollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime)
 		if err != nil {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
+			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
 			return errors.New("invalid polling time duration provided")
 		}
 	}
@@ -100,7 +91,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.tomb = &tomb.Tomb{}
 	client, err := s.clientType.Client()
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
 		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
 		return clientErr
 	}
@@ -130,6 +121,8 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
+	s.iteratorClosed = true
+
 	if s.records != nil {
 		close(s.records)
 	}
