@@ -48,7 +48,7 @@ func TestSuccessfulTearDown(t *testing.T) {
 	}
 
 	defer func() {
-		err := cleanupDataset(t, []string{tableID, tableID2})
+		err := cleanupDataset(t, []string{tableID})
 		if err != nil {
 			t.Log("Got error while cleanup. Err: ", err)
 		}
@@ -62,6 +62,7 @@ func TestSuccessfulTearDown(t *testing.T) {
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -88,7 +89,7 @@ func TestMultipleTables(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset(t, []string{tableID, tableID2})
+		err := cleanupDataset(t, []string{tableID})
 		if err != nil {
 			t.Log("Got error while cleanup. Err: ", err)
 		}
@@ -101,8 +102,9 @@ func TestMultipleTables(t *testing.T) {
 	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
 	cfg[googlebigquery.ConfigProjectID] = projectID
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = fmt.Sprintf("%v,%v", tableID, tableID2)
+	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -130,6 +132,7 @@ func TestInvalidCreds(t *testing.T) {
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = "test"
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	googlebigquery.PollingTime = time.Second * 1
 	ctx := context.Background()
@@ -202,6 +205,7 @@ func TestInvalid(t *testing.T) {
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err := src.Configure(ctx, cfg)
@@ -209,7 +213,7 @@ func TestInvalid(t *testing.T) {
 		t.Errorf("expected no error, got %v", err)
 	}
 
-	pos, err := json.Marshal(Key{TableID: "conduit_test_table", Offset: fmt.Sprintf("%d", 46)})
+	pos, err := json.Marshal(fmt.Sprintf("%d", 46))
 	if err != nil {
 		t.Log(err)
 	}
@@ -238,7 +242,7 @@ func TestInvalidOrderByName(t *testing.T) {
 		return
 	}
 	defer func() {
-		err := cleanupDataset(t, []string{tableID, tableID2})
+		err := cleanupDataset(t, []string{tableID})
 		if err != nil {
 			t.Log("Got error while cleanup. Err: ", err)
 		}
@@ -250,7 +254,8 @@ func TestInvalidOrderByName(t *testing.T) {
 		googlebigquery.ConfigProjectID:          projectID,
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "conduit_test_table-post_abbr",
+		googlebigquery.ConfigIncrementalColName: "post_abbr",
+		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr",
 	}
 
 	ctx := context.Background()

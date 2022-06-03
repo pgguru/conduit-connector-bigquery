@@ -49,8 +49,8 @@ func Specification() sdk.Specification {
 			},
 			ConfigTableID: {
 				Default:     "",
-				Required:    false,
-				Description: "Google Bigqueries table ID. Can provide `,` separated ID. Will pull whole dataset if no tableID provided.",
+				Required:    true,
+				Description: "Google Bigqueries table ID.",
 			},
 			ConfigPollingTime: {
 				Default:     "5",
@@ -62,14 +62,14 @@ func Specification() sdk.Specification {
 				Required: false,
 				Description: `Column name which provides visibility about newer rows. For eg, updated_at column which stores when the row was last updated\n
 				primary key with incremental value say id of type int or float.  \n eg value,
-				 tableid:columnName,tableid:columnName,...`,
+				 updated_at`,
 			},
 			ConfigPrimaryKeyColName: {
 				Default:  "",
 				Required: false,
 				Description: `Column name which provides visibility about uniqueness. For eg, _id which stores \n
 				primary key with incremental value say id of type int or float.  \n eg value,
-				 tableid:columnName,tableid:columnName,...`,
+				 id`,
 			},
 		},
 	}
