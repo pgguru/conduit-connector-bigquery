@@ -33,9 +33,8 @@ type Source struct {
 	sourceConfig googlebigquery.SourceConfig
 	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
-	ctx     context.Context
-	records chan sdk.Record
-	// position faces race condition. So will always use it inside lock
+	ctx            context.Context
+	records        chan sdk.Record
 	position       string
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
@@ -43,11 +42,6 @@ type Source struct {
 	// interface to provide BigQuery client. In testing this will be used to mock the client
 	clientType clientFactory
 }
-
-// type position struct {
-// 	// lock      *sync.Mutex
-// 	positions string
-// }
 
 func NewSource() sdk.Source {
 	return &Source{}
