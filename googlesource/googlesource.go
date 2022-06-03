@@ -48,7 +48,7 @@ func (client *client) Client() (*bigquery.Client, error) {
 // checkInitialPos helps in creating the query to fetch data from endpoint
 func (s *Source) checkInitialPos() (firstSync, userDefinedOffset, userDefinedKey bool) {
 	// if its the firstSync no offset is applied
-	if s.getPosition() == "" {
+	if s.position == "" {
 		firstSync = true
 	}
 
@@ -65,18 +65,12 @@ func (s *Source) checkInitialPos() (firstSync, userDefinedOffset, userDefinedKey
 	return
 }
 
-func (s *Source) getPosition() string {
-	// s.position.lock.Lock()
-	// defer s.position.lock.Unlock()
-	return s.position
-}
-
 // ReadGoogleRow fetches data from endpoint. It creates sdk.record and puts it in response channel
 func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 	sdk.Logger(ctx).Trace().Msg("Inside read google row")
 	var userDefinedOffset, userDefinedKey, firstSync bool
 
-	offset := s.getPosition()
+	offset := s.position
 	tableID := s.sourceConfig.Config.TableID
 
 	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos()
@@ -223,10 +217,8 @@ func getType(fieldType bigquery.FieldType, offset string) string {
 	}
 }
 
-// writePosition prevents race condition happening while using map inside goroutine
+// writePosition marshal the position
 func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
-	// s.position.lock.Lock()
-	// defer s.position.lock.Unlock()
 	s.position = offset
 	return json.Marshal(&s.position)
 }
@@ -299,10 +291,8 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	}
 }
 
+// fetchPos unmarshal position
 func fetchPos(s *Source, pos sdk.Position) {
-	// s.position.lock = new(sync.Mutex)
-	// s.position.lock.Lock()
-	// defer s.position.lock.Unlock()
 	s.position = ""
 
 	err := json.Unmarshal(pos, &s.position)
