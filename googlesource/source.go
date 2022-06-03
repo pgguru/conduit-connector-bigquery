@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -35,12 +36,19 @@ type Source struct {
 	// ctx value ctx was required in struct.
 	ctx            context.Context
 	records        chan sdk.Record
-	position       string
+	position       position
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
 	iteratorClosed bool
 	// interface to provide BigQuery client. In testing this will be used to mock the client
 	clientType clientFactory
+}
+
+// position faces race condition. So will always use it inside lock. Write and Read happens on same time.
+// Ref issue- https://github.com/neha-Gupta1/conduit-connector-bigquery/issues/26
+type position struct {
+	lock      *sync.Mutex
+	positions string
 }
 
 func NewSource() sdk.Source {
