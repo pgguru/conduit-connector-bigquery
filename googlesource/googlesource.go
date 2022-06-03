@@ -30,8 +30,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-// clientI provides function to create BigQuery Client
-type clientI interface {
+// clientFactory provides function to create BigQuery Client
+type clientFactory interface {
 	Client() (*bigquery.Client, error)
 }
 
