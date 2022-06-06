@@ -15,9 +15,7 @@
 package googlesource
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -90,108 +88,6 @@ func dataSetup(t *testing.T) (err error) {
 	t.Log("Table created:", tableID)
 
 	return nil
-}
-
-func createDatasetForAcceptance(t *testing.T, tableID string) (err error) {
-	ctx := context.Background()
-
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
-	if err != nil {
-		return fmt.Errorf("bigquery.NewClient: %v", err)
-	}
-	defer client.Close()
-
-	meta := &bigquery.DatasetMetadata{
-		Location: location, // See https://cloud.google.com/bigquery/docs/locations
-	}
-
-	// create dataset
-	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	t.Log("Dataset created")
-	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
-	if err != nil {
-		return fmt.Errorf("bigquery.NewClient: %v", err)
-	}
-	defer client.Close()
-
-	sampleSchema := bigquery.Schema{
-		{Name: "abb", Type: bigquery.StringFieldType},
-		{Name: "name", Type: bigquery.StringFieldType},
-	}
-
-	metaData := &bigquery.TableMetadata{
-		Schema:         sampleSchema,
-		ExpirationTime: time.Now().AddDate(1, 0, 0), // Table will be automatically deleted in 1 year.
-	}
-	tableRef := client.Dataset(datasetID).Table(tableID)
-	err = tableRef.Create(ctx, metaData)
-	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	return
-}
-
-// dataSetupWithRecord Initial setup required - project with service account.
-func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
-	ctx := context.Background()
-	tableID := config[googlebigquery.ConfigTableID]
-
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
-	if err != nil {
-		return result, fmt.Errorf("bigquery.NewClient: %v", err)
-	}
-	defer client.Close()
-
-	var query string
-	positions := ""
-
-	for i := 0; i < len(record); i++ {
-		name := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
-		abb := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
-		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + abb + "' , '" + name + "')"
-
-		data := make(sdk.StructuredData)
-		data["abb"] = abb
-		data["name"] = name
-
-		key := name
-
-		buffer := &bytes.Buffer{}
-		if err := gob.NewEncoder(buffer).Encode(key); err != nil {
-			return result, err
-		}
-		byteKey := buffer.Bytes()
-
-		positions = fmt.Sprintf("'%s'", name)
-		positionRecord, err := json.Marshal(&positions)
-		if err != nil {
-			t.Log("error found", err)
-			return result, err
-		}
-
-		result = append(result, sdk.Record{Payload: data, Key: sdk.RawData(byteKey), Position: positionRecord})
-		q := client.Query(query)
-		q.Location = location
-
-		job, err := q.Run(ctx)
-		if err != nil {
-			t.Log("Error found: ", err)
-		}
-
-		status, err := job.Wait(ctx)
-		if err != nil {
-			t.Log("Error found: ", err)
-			return result, err
-		}
-
-		if err = status.Err(); err != nil {
-			t.Log("Error found: ", err)
-		}
-		globalCounter++
-	}
-	return result, nil
 }
 
 // Item represents a row item.
