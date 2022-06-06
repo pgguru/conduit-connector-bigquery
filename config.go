@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -52,12 +51,12 @@ const (
 type Config struct {
 	ProjectID         string
 	DatasetID         string
-	TableIDs          string
+	TableID           string
 	ServiceAccount    string
 	Location          string
 	PollingTime       string
-	IncrementColName  map[string]string // IncrementColName is map of tableID and corresponding column which would be used as incrementing column
-	PrimaryKeyColName map[string]string
+	IncrementColName  string // IncrementColName is incrementing column name. This is used as offset
+	PrimaryKeyColName string // PrimaryKeyColName is primary key column. This is used as primary key
 }
 
 var (
@@ -95,37 +94,23 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		return SourceConfig{}, errors.New("location can't be blank")
 	}
 
+	if _, ok := cfg[ConfigTableID]; !ok {
+		return SourceConfig{}, errors.New("tableID can't be blank")
+	}
+
+	if _, ok := cfg[ConfigPrimaryKeyColName]; !ok {
+		return SourceConfig{}, errors.New("primary key can't be blank")
+	}
+
 	config := Config{
-		ServiceAccount: cfg[ConfigServiceAccount],
-		ProjectID:      cfg[ConfigProjectID],
-		DatasetID:      cfg[ConfigDatasetID],
-		TableIDs:       cfg[ConfigTableID],
-		Location:       cfg[ConfigLocation],
-		PollingTime:    cfg[ConfigPollingTime]}
-
-	if orderby, ok := cfg[ConfigIncrementalColName]; ok {
-		config.IncrementColName = make(map[string]string)
-		tableArr := strings.Split(orderby, ",")
-		for _, table := range tableArr {
-			singleTableRow := strings.Split(table, ":")
-			if len(singleTableRow) < 2 {
-				return SourceConfig{}, errors.New("invalid formating of incremental column, should be tableid:columnName,anotherTableid:anotherColumnName")
-			}
-			config.IncrementColName[singleTableRow[0]] = singleTableRow[1]
-		}
-	}
-
-	if primaryKey, ok := cfg[ConfigPrimaryKeyColName]; ok {
-		config.PrimaryKeyColName = make(map[string]string)
-		tableArr := strings.Split(primaryKey, ",")
-		for _, table := range tableArr {
-			singleTableRow := strings.Split(table, ":")
-			if len(singleTableRow) < 2 {
-				return SourceConfig{}, errors.New("invalid formating of primary key column, should be tableid:columnName,anotherTableid:anotherColumnName")
-			}
-			config.PrimaryKeyColName[singleTableRow[0]] = singleTableRow[1]
-		}
-	}
+		ServiceAccount:    cfg[ConfigServiceAccount],
+		ProjectID:         cfg[ConfigProjectID],
+		DatasetID:         cfg[ConfigDatasetID],
+		TableID:           cfg[ConfigTableID],
+		Location:          cfg[ConfigLocation],
+		PollingTime:       cfg[ConfigPollingTime],
+		IncrementColName:  cfg[ConfigIncrementalColName],
+		PrimaryKeyColName: cfg[ConfigPrimaryKeyColName]}
 
 	return SourceConfig{
 		Config: config,

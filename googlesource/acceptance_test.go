@@ -32,8 +32,8 @@ func TestAcceptance(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            "table_acceptance",
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigPrimaryKeyColName:  "table_acceptance:name", //"table_acceptance"
-		googlebigquery.ConfigIncrementalColName: "table_acceptance:name",
+		googlebigquery.ConfigPrimaryKeyColName:  "name",
+		googlebigquery.ConfigIncrementalColName: "name",
 		googlebigquery.ConfigPollingTime:        "1ms",
 	}
 
@@ -49,7 +49,7 @@ func TestAcceptance(t *testing.T) {
 				goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
 			},
 			AfterTest: func(t *testing.T) {
-				err := cleanupDataset([]string{cfg[googlebigquery.ConfigTableID]})
+				err := cleanupDataset(t, []string{cfg[googlebigquery.ConfigTableID]})
 				if err != nil {
 					fmt.Println("Error found")
 				}
@@ -137,16 +137,21 @@ func (d AcceptanceTestDriver) WriteToSource(t *testing.T, records []sdk.Record) 
 	var err error
 	is := is.New(t)
 	config := d.SourceConfig(t)
-	records, err = writeToSource(config, records)
+	records, err = writeToSource(t, config, records)
 	is.NoErr(err)
 
 	return records
 }
 
-func writeToSource(config map[string]string, records []sdk.Record) (result []sdk.Record, err error) {
-	result, err = dataSetupWithRecord(config, records)
+func writeToSource(t *testing.T, config map[string]string, records []sdk.Record) (result []sdk.Record, err error) {
+	result, err = dataSetupWithRecord(t, config, records)
 	return result, err
 }
 func (d AcceptanceTestDriver) ReadFromDestination(*testing.T, []sdk.Record) []sdk.Record {
 	return []sdk.Record{}
+}
+
+func (d AcceptanceTestDriver) GenerateRecord(_ *testing.T) sdk.Record {
+	// we don't create record over here. Because we need to code here and then decode again
+	return sdk.Record{}
 }

@@ -20,7 +20,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"testing"
@@ -33,29 +32,20 @@ import (
 )
 
 var (
-	serviceAccount   = os.Getenv("SERVICE_ACCOUNT") // eg, export SERVICE_ACCOUNT = "path_to_file"
-	projectID        = os.Getenv("PROJECT_ID")      // eg, export PROJECT_ID ="conduit-connectors"
+	serviceAccount   = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
+	projectID        = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
 	datasetID        = "conduit_test_dataset"
 	tableID          = "conduit_test_table"
-	tableID2         = "conduit_test_table_2"
 	tableIDTimeStamp = "conduit_test_table_time_stamp"
 	location         = "US"
 	globalCounter    = 0
 )
 
-func DataSetup() (err error) {
-	err = dataSetup()
-	if err != nil {
-		return err
-	}
-	return err
-}
-
 // Initial setup required - project with service account.
-func dataSetup() (err error) {
+func dataSetup(t *testing.T) (err error) {
 	ctx := context.Background()
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -69,8 +59,7 @@ func dataSetup() (err error) {
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
 	}
-	fmt.Println("Dataset created")
-	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -98,36 +87,17 @@ func dataSetup() (err error) {
 		return fmt.Errorf("job completed with error: %v", status.Err())
 	}
 
-	fmt.Println("Table created:", tableID)
-	// create another table
-
-	loader = client.Dataset(datasetID).Table(tableID2).LoaderFrom(gcsRef)
-	loader.WriteDisposition = bigquery.WriteEmpty
-
-	job, err = loader.Run(ctx)
-	if err != nil {
-		return err
-	}
-	status, err = job.Wait(ctx)
-	if err != nil {
-		return err
-	}
-
-	if status.Err() != nil && !strings.Contains(status.Err().Error(), "duplicate") {
-		return fmt.Errorf("job completed with error: %v", status.Err())
-	}
-	time.Sleep(time.Second * 10)
-	fmt.Println("Table created:", tableID2)
+	t.Log("Table created:", tableID)
 
 	return nil
 }
 
 // dataSetupWithRecord Initial setup required - project with service account.
-func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
+func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
 	ctx := context.Background()
 	tableID := config[googlebigquery.ConfigTableID]
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return result, fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -141,8 +111,8 @@ func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result 
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return result, err
 	}
-	fmt.Println("Dataset created")
-	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	t.Log("Dataset created")
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return result, fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -164,10 +134,9 @@ func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result 
 	}
 
 	var query string
-	positions := make(map[string]string)
+	positions := ""
 
 	for i := 0; i < len(record); i++ {
-		// name := fmt.Sprintf("%s", record[i].Payload.Bytes())
 		name := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
 		abb := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
 		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + abb + "' , '" + name + "')"
@@ -176,10 +145,7 @@ func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result 
 		data["abb"] = abb
 		data["name"] = name
 
-		key := Key{
-			TableID: tableID,
-			Offset:  name,
-		}
+		key := name
 
 		buffer := &bytes.Buffer{}
 		if err := gob.NewEncoder(buffer).Encode(key); err != nil {
@@ -187,10 +153,10 @@ func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result 
 		}
 		byteKey := buffer.Bytes()
 
-		positions[tableID] = fmt.Sprintf("'%s'", name)
+		positions = fmt.Sprintf("'%s'", name)
 		positionRecord, err := json.Marshal(&positions)
 		if err != nil {
-			log.Println("error found", err)
+			t.Log("error found", err)
 			return result, err
 		}
 
@@ -200,17 +166,17 @@ func dataSetupWithRecord(config map[string]string, record []sdk.Record) (result 
 
 		job, err := q.Run(ctx)
 		if err != nil {
-			log.Println("Error found: ", err)
+			t.Log("Error found: ", err)
 		}
 
 		status, err := job.Wait(ctx)
 		if err != nil {
-			log.Println("Error found: ", err)
+			t.Log("Error found: ", err)
 			return result, err
 		}
 
 		if err = status.Err(); err != nil {
-			log.Println("Error found: ", err)
+			t.Log("Error found: ", err)
 		}
 		globalCounter++
 	}
@@ -225,10 +191,10 @@ type Item struct {
 }
 
 // Initial setup required - project with service account.
-func dataSetupWithTimestamp() (err error) {
+func dataSetupWithTimestamp(t *testing.T) (err error) {
 	ctx := context.Background()
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -240,9 +206,9 @@ func dataSetupWithTimestamp() (err error) {
 
 	// create dataset
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
+		t.Log("Dataset could not be created created")
 		return err
 	}
-	fmt.Println("Dataset created")
 
 	sampleSchema := bigquery.Schema{
 		{Name: "name", Type: bigquery.StringFieldType},
@@ -256,8 +222,8 @@ func dataSetupWithTimestamp() (err error) {
 	}
 	tableRef := client.Dataset(datasetID).Table(tableIDTimeStamp)
 	err = tableRef.Create(ctx, metaData)
-	fmt.Println("Error: ", err)
 	if err != nil && !strings.Contains(err.Error(), "duplicate") {
+		t.Log("Error: ", err)
 		return err
 	}
 
@@ -273,29 +239,31 @@ func dataSetupWithTimestamp() (err error) {
 
 		job, err := q.Run(ctx)
 		if err != nil {
-			log.Println("Error found: ", err)
+			t.Log("Error found: ", err)
+			return err
 		}
 
 		status, err := job.Wait(ctx)
 		if err != nil {
-			log.Println("Error found: ", err)
+			t.Log("Error found: ", err)
+			return err
 		}
 
-		if err := status.Err(); err != nil {
-			log.Println("Error found: ", err)
+		if err = status.Err(); err != nil {
+			t.Log("Error found: ", err)
+			return err
 		}
 	}
 
 	return nil
 }
 
-func dataUpdationWithTimestamp() {
+func dataUpdationWithTimestamp(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
-		log.Println("Error found: ", err)
-		// return fmt.Errorf("bigquery.NewClient: %v", err)
+		t.Log("Error found: ", err)
 	}
 	defer client.Close()
 
@@ -307,22 +275,25 @@ func dataUpdationWithTimestamp() {
 
 	job, err := q.Run(ctx)
 	if err != nil {
-		log.Println("Error found: ", err)
+		t.Log("Error found: ", err)
+		return
 	}
 
 	status, err := job.Wait(ctx)
 	if err != nil {
-		log.Println("Error found: ", err)
+		t.Log("Error found: ", err)
+		return
 	}
 
 	if err := status.Err(); err != nil {
-		log.Println("Error found: ", err)
+		t.Log("Error found: ", err)
+		return
 	}
 }
 
-func cleanupDataset(tables []string) (err error) {
+func cleanupDataset(t *testing.T, tables []string) (err error) {
 	ctx := context.Background()
-	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
@@ -336,27 +307,30 @@ func cleanupDataset(tables []string) (err error) {
 		}
 	}
 
-	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(serviceAccount))
+	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
 		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 
 	if err = client.Dataset(datasetID).Delete(ctx); err != nil {
-		fmt.Println("Error in delete: ", err)
+		// dataset could already be in use. it is okay if it does not get deleted
+		t.Log("Error in delete: ", err)
 		return err
 	}
 	return err
 }
 
 func TestSuccessTimeIncremental(t *testing.T) {
-	err := dataSetupWithTimestamp()
+	err := dataSetupWithTimestamp(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableIDTimeStamp})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableIDTimeStamp})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -366,38 +340,32 @@ func TestSuccessTimeIncremental(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            tableIDTimeStamp,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
-		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:age", tableIDTimeStamp),
+		googlebigquery.ConfigIncrementalColName: "updatedat",
+		googlebigquery.ConfigPrimaryKeyColName:  "age",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
 	pos := sdk.Position{}
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("error: ", err)
+		t.Log("error: ", err)
 	}
 	time.Sleep(5 * time.Second)
 	for {
-		record, err := src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
-			fmt.Println(err)
+		_, err := src.Read(ctx)
+		if err != nil && err == sdk.ErrBackoffRetry {
+			t.Log("Error: ", err)
 			break
 		}
-
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
 	}
 
 	err = src.Teardown(ctx)
@@ -407,14 +375,16 @@ func TestSuccessTimeIncremental(t *testing.T) {
 }
 
 func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
-	err := dataSetupWithTimestamp()
+	err := dataSetupWithTimestamp(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableIDTimeStamp})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableIDTimeStamp})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -424,72 +394,51 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            tableIDTimeStamp,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
-		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:age", tableIDTimeStamp),
+		googlebigquery.ConfigIncrementalColName: "updatedat",
+		googlebigquery.ConfigPrimaryKeyColName:  "age",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
 	pos := sdk.Position{}
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		t.Log("errror: ", err)
 	}
 
 	var recordPos []byte
 
 	time.Sleep(15 * time.Second)
-	var record sdk.Record
 	for {
-		record, err = src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			fmt.Println(err)
+			t.Log(err)
 			break
 		}
 		if err != nil {
-			fmt.Println("Error: ", err)
-			return
+			t.Errorf("expected no error, got %v", err)
 		}
-
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
-		recordPos = record.Position
 	}
 
 	// check updated
-	dataUpdationWithTimestamp()
+	dataUpdationWithTimestamp(t)
 
 	err = src.Open(ctx, recordPos)
 	if err != nil {
-		fmt.Println("error: ", err)
+		t.Log("error: ", err)
 	}
 	time.Sleep(5 * time.Second)
 	for {
-		record, err = src.Read(ctx)
+		_, err = src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			fmt.Println(err)
+			t.Log(err)
 			break
 		}
-
-		value := string(record.Position)
-		fmt.Printf("After 1st read: Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
 	}
 
 	err = src.Teardown(ctx)
@@ -499,14 +448,16 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 }
 
 func TestSuccessPrimaryKey(t *testing.T) {
-	err := dataSetupWithTimestamp()
+	err := dataSetupWithTimestamp(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableIDTimeStamp})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableIDTimeStamp})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -516,37 +467,32 @@ func TestSuccessPrimaryKey(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            tableIDTimeStamp,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:age", tableIDTimeStamp),
-		googlebigquery.ConfigPrimaryKeyColName:  fmt.Sprintf("%s:updatedat", tableIDTimeStamp),
+		googlebigquery.ConfigIncrementalColName: "age",
+		googlebigquery.ConfigPrimaryKeyColName:  "updatedat",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
 	pos := sdk.Position{}
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("error: ", err)
+		t.Log("error: ", err)
 	}
 	time.Sleep(5 * time.Second)
 	for {
-		record, err := src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
-			fmt.Println(err)
+		_, err = src.Read(ctx)
+		if err != nil && err == sdk.ErrBackoffRetry {
+			t.Log(err)
 			break
 		}
-
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
-		value = string(record.Key.Bytes())
-		fmt.Println("Key :", value)
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
 	}
 
 	err = src.Teardown(ctx)
@@ -555,56 +501,55 @@ func TestSuccessPrimaryKey(t *testing.T) {
 	}
 }
 
-func TestSuccessfulGet(t *testing.T) {
-	err := dataSetup()
+func TestSuccessfulGetFromPosition(t *testing.T) {
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Log("Could not create values. Err: ", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount: serviceAccount,
-		googlebigquery.ConfigProjectID:      projectID,
-		googlebigquery.ConfigDatasetID:      datasetID,
-		googlebigquery.ConfigTableID:        tableID,
-		googlebigquery.ConfigLocation:       location,
+		googlebigquery.ConfigServiceAccount:    serviceAccount,
+		googlebigquery.ConfigProjectID:         projectID,
+		googlebigquery.ConfigDatasetID:         datasetID,
+		googlebigquery.ConfigTableID:           tableID,
+		googlebigquery.ConfigLocation:          location,
+		googlebigquery.ConfigPrimaryKeyColName: "post_abbr",
 	}
 	googlebigquery.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
-	positionMap := make(map[string]string)
-	positionMap["conduit_test_table"] = "46"
-	pos, err := json.Marshal(&positionMap)
+	position := "46"
+	pos, err := json.Marshal(&position)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		t.Log("error: ", err)
 	}
 	time.Sleep(15 * time.Second)
 	for i := 0; i <= 4; i++ {
-		record, err := src.Read(ctx)
-		if err != nil || ctx.Err() != nil {
-			fmt.Println(err)
+		_, err := src.Read(ctx)
+		if err != nil && err == sdk.ErrBackoffRetry {
+			t.Log(err)
 			break
 		}
-
-		value := string(record.Position)
-		fmt.Printf("Record position found: %s", value)
-
-		value = string(record.Payload.Bytes())
-		fmt.Println(" :", value)
+		if err != nil || ctx.Err() != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
 	}
 
 	err = src.Teardown(ctx)
@@ -614,14 +559,16 @@ func TestSuccessfulGet(t *testing.T) {
 }
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
-	err := dataSetup()
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -629,14 +576,15 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		googlebigquery.ConfigServiceAccount:     serviceAccount,
 		googlebigquery.ConfigProjectID:          projectID,
 		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigTableID:            fmt.Sprintf("%s,%s", tableID, tableID2), // tableID,
+		googlebigquery.ConfigTableID:            tableID, // tableID,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: fmt.Sprintf("%s:post_abbr", tableID)}
+		googlebigquery.ConfigIncrementalColName: "post_abbr",
+		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr"}
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 		t.Errorf("some other error found: %v", err)
 	}
 
@@ -644,25 +592,19 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		t.Log("errror: ", err)
 		t.Errorf("some other error found: %v", err)
 	}
 	time.Sleep(10 * time.Second)
 
 	for {
-		record, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			fmt.Println("err: ", err)
 			break
 		}
 		if err != nil {
 			t.Errorf("some other error found: %v", err)
 		}
-		value := string(record.Position)
-		fmt.Println("Record found:", value)
-		value = string(record.Payload.Bytes())
-		fmt.Println(":", value)
-		fmt.Println("\n* ")
 	}
 
 	err = src.Teardown(ctx)
@@ -672,14 +614,16 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 }
 
 func TestSuccessfulOrderByName(t *testing.T) {
-	err := dataSetup()
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataset([]string{tableID, tableID2})
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -688,13 +632,15 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		googlebigquery.ConfigProjectID:          projectID,
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "conduit_test_table:post_abbr",
+		googlebigquery.ConfigTableID:            tableID,
+		googlebigquery.ConfigIncrementalColName: "post_abbr",
+		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr",
 	}
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 		t.Errorf("some other error found: %v", err)
 	}
 
@@ -702,24 +648,19 @@ func TestSuccessfulOrderByName(t *testing.T) {
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err != nil {
-		fmt.Println("errror: ", err)
+		t.Log("errror: ", err)
 		t.Errorf("some other error found: %v", err)
 	}
 	time.Sleep(5 * time.Second)
 
 	for {
-		record, err := src.Read(ctx)
+		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
-			fmt.Println("err: ", err)
 			break
 		}
 		if err != nil {
 			t.Errorf("some other error found: %v", err)
 		}
-		value := string(record.Position)
-		fmt.Println("Record found:", value)
-		value = string(record.Payload.Bytes())
-		fmt.Println(":", value)
 	}
 
 	err = src.Teardown(ctx)
