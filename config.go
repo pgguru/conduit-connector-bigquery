@@ -36,22 +36,33 @@ const (
 
 	// ConfigLocation location of the dataset
 	ConfigLocation = "datasetLocation"
+
+	// ConfigPollingTime time after which polling should be done
+	ConfigPollingTime = "pollingTime"
+
+	// ConfigOrderBy lets user decide
+	ConfigIncrementalColName = "incrementingColumnName"
+
+	// ConfigPrimaryKeyColName provide primary key
+	ConfigPrimaryKeyColName = "primaryKeyColName"
 )
 
 // Config represents configuration needed for S3
 type Config struct {
-	ConfigProjectID      string
-	ConfigDatasetID      string
-	ConfigTableID        string
-	ConfigServiceAccount string
-	ConfigLocation       string
+	ProjectID         string
+	DatasetID         string
+	TableID           string
+	ServiceAccount    string
+	Location          string
+	PollingTime       string
+	IncrementColName  string // IncrementColName is incrementing column name. This is used as offset
+	PrimaryKeyColName string // PrimaryKeyColName is primary key column. This is used as primary key
 }
 
 var (
 	// CounterLimit sets limit of how many rows will be fetched in each job
 	CounterLimit = 500
-	// PollingTime time after which ticker will pull data
-	PollingTime = time.Minute * 1
+	PollingTime  = time.Minute * 5
 )
 
 // SourceConfig is config for source
@@ -82,12 +93,23 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		return SourceConfig{}, errors.New("location can't be blank")
 	}
 
+	if _, ok := cfg[ConfigTableID]; !ok {
+		return SourceConfig{}, errors.New("tableID can't be blank")
+	}
+
+	if _, ok := cfg[ConfigPrimaryKeyColName]; !ok {
+		return SourceConfig{}, errors.New("primary key can't be blank")
+	}
+
 	config := Config{
-		ConfigServiceAccount: cfg[ConfigServiceAccount],
-		ConfigProjectID:      cfg[ConfigProjectID],
-		ConfigDatasetID:      cfg[ConfigDatasetID],
-		ConfigTableID:        cfg[ConfigTableID],
-		ConfigLocation:       cfg[ConfigLocation]}
+		ServiceAccount:    cfg[ConfigServiceAccount],
+		ProjectID:         cfg[ConfigProjectID],
+		DatasetID:         cfg[ConfigDatasetID],
+		TableID:           cfg[ConfigTableID],
+		Location:          cfg[ConfigLocation],
+		PollingTime:       cfg[ConfigPollingTime],
+		IncrementColName:  cfg[ConfigIncrementalColName],
+		PrimaryKeyColName: cfg[ConfigPrimaryKeyColName]}
 
 	return SourceConfig{
 		Config: config,

@@ -22,12 +22,12 @@ import (
 func Specification() sdk.Specification {
 	return sdk.Specification{
 		Name:        "bigquery",
-		Summary:     "A bigquery source plugin for Conduit, written in Go.",
-		Description: "A plugin to fetch data from google bigquery",
+		Summary:     "A BigQuery source plugin for Conduit, written in Go.",
+		Description: "A plugin to fetch data from google BigQuery",
 		Version:     "v0.1.0",
 		Author:      "Neha Gupta",
 		SourceParams: map[string]sdk.Parameter{
-			ConfigServiceAccount: { // TODO: can it be changed
+			ConfigServiceAccount: {
 				Default:     "",
 				Required:    true,
 				Description: "Path to service account key with data pulling access.", // We can also take it as value if required
@@ -49,8 +49,27 @@ func Specification() sdk.Specification {
 			},
 			ConfigTableID: {
 				Default:     "",
+				Required:    true,
+				Description: "Google Bigqueries table ID.",
+			},
+			ConfigPollingTime: {
+				Default:     "5",
 				Required:    false,
-				Description: "Google Bigqueries table ID. Can provide `,` separated ID. Will pull whole dataset if no tableID provided.",
+				Description: "polling period for the CDC mode, formatted as a time.Duration string.",
+			},
+			ConfigIncrementalColName: {
+				Default:  "",
+				Required: false,
+				Description: `Column name which provides visibility about newer rows. For eg, updated_at column which stores when the row was last updated\n
+				primary key with incremental value say id of type int or float.  \n eg value,
+				 updated_at`,
+			},
+			ConfigPrimaryKeyColName: {
+				Default:  "",
+				Required: false,
+				Description: `Column name which provides visibility about uniqueness. For eg, _id which stores \n
+				primary key with incremental value say id of type int or float.  \n eg value,
+				 id`,
 			},
 		},
 	}

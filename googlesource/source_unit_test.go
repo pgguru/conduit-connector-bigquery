@@ -25,7 +25,6 @@ import (
 	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
-	"google.golang.org/api/option"
 	"gopkg.in/tomb.v2"
 )
 
@@ -42,15 +41,17 @@ func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
 }
 
 func TestSuccessfulTearDown(t *testing.T) {
-	err := dataSetup()
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 
 	defer func() {
-		err := cleanupDataSet()
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -61,6 +62,7 @@ func TestSuccessfulTearDown(t *testing.T) {
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -81,14 +83,16 @@ func TestSuccessfulTearDown(t *testing.T) {
 }
 
 func TestMultipleTables(t *testing.T) {
-	err := dataSetup()
+	err := dataSetup(t)
 	if err != nil {
-		fmt.Println("Could not create values. Err: ", err)
+		t.Errorf("Could not create values. Err: %v", err)
 		return
 	}
 	defer func() {
-		err := cleanupDataSet()
-		fmt.Println("Got error while cleanup. Err: ", err)
+		err := cleanupDataset(t, []string{tableID})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
 	}()
 
 	src := Source{}
@@ -98,8 +102,9 @@ func TestMultipleTables(t *testing.T) {
 	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
 	cfg[googlebigquery.ConfigProjectID] = projectID
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = fmt.Sprintf("%v,%v", tableID, tableID2)
+	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -127,6 +132,7 @@ func TestInvalidCreds(t *testing.T) {
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = "test"
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	googlebigquery.PollingTime = time.Second * 1
 	ctx := context.Background()
@@ -138,13 +144,13 @@ func TestInvalidCreds(t *testing.T) {
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err == nil {
-		fmt.Println("we should get error in read")
+		t.Log("we should get error in read")
 	}
 	time.Sleep(10 * time.Second)
 	for {
 		_, err := src.Read(ctx)
 		if err != nil {
-			fmt.Println("got the expected error. Err: ", err)
+			t.Log("got the expected error. Err: ", err)
 			break
 		}
 		if err == nil {
@@ -170,14 +176,6 @@ func TestAck(t *testing.T) {
 	}
 }
 
-func TestTableFetchInvalidCred(t *testing.T) {
-	s := Source{}
-	_, err := s.listTables("", "")
-	if err == nil {
-		t.Errorf("expected error, got nil")
-	}
-}
-
 func TestNextContextDone(t *testing.T) {
 	s := Source{}
 	ctx := context.Background()
@@ -190,16 +188,15 @@ func TestNextContextDone(t *testing.T) {
 	}
 }
 
+type mockClient struct {
+}
+
+func (client *mockClient) Client() (*bigquery.Client, error) {
+	return nil, fmt.Errorf("mock error")
+}
+
 func TestInvalid(t *testing.T) {
 	googlebigquery.PollingTime = time.Second * 1
-	tmpClient := newClient
-	defer func() {
-		newClient = tmpClient
-	}()
-
-	newClient = func(ctx context.Context, projectID string, opts ...option.ClientOption) (*bigquery.Client, error) {
-		return nil, fmt.Errorf("mock")
-	}
 
 	src := Source{}
 	cfg := map[string]string{}
@@ -208,6 +205,7 @@ func TestInvalid(t *testing.T) {
 	cfg[googlebigquery.ConfigDatasetID] = datasetID
 	cfg[googlebigquery.ConfigTableID] = tableID
 	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err := src.Configure(ctx, cfg)
@@ -215,14 +213,14 @@ func TestInvalid(t *testing.T) {
 		t.Errorf("expected no error, got %v", err)
 	}
 
-	pos, err := json.Marshal(Position{TableID: "conduit_test_table", Offset: 46})
+	pos, err := json.Marshal(fmt.Sprintf("%d", 46))
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
-
+	src.clientType = &mockClient{}
 	err = src.Open(ctx, pos)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
+	if err == nil {
+		t.Errorf("expected error, got %v", err)
 	}
 
 	time.Sleep(15 * time.Second)
@@ -234,5 +232,36 @@ func TestInvalid(t *testing.T) {
 	err = src.Teardown(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestInvalidOrderByName(t *testing.T) {
+	err := dataSetup(t)
+	if err != nil {
+		t.Errorf("Could not create values. Err: %v", err)
+		return
+	}
+	defer func() {
+		err := cleanupDataset(t, []string{tableID})
+		if err != nil {
+			t.Log("Got error while cleanup. Err: ", err)
+		}
+	}()
+
+	src := Source{}
+	cfg := map[string]string{
+		googlebigquery.ConfigServiceAccount:     serviceAccount,
+		googlebigquery.ConfigProjectID:          projectID,
+		googlebigquery.ConfigDatasetID:          datasetID,
+		googlebigquery.ConfigLocation:           location,
+		googlebigquery.ConfigIncrementalColName: "post_abbr",
+		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr",
+	}
+
+	ctx := context.Background()
+	err = src.Configure(ctx, cfg)
+	if err == nil {
+		t.Log("expected error. got null")
+		t.Errorf("some other error found: %v", err)
 	}
 }

@@ -15,11 +15,12 @@
 package googlesource
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -30,58 +31,82 @@ import (
 	"google.golang.org/api/option"
 )
 
-var (
-	newClient = bigquery.NewClient
-)
-
-type readRowInput struct {
-	tableID  string
-	position Position
-	wg       *sync.WaitGroup
+// clientFactory provides function to create BigQuery Client
+type clientFactory interface {
+	Client() (*bigquery.Client, error)
 }
 
-func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.Record) (err error) {
-	input := <-rowInput
-	position := input.position
-	tableID := input.tableID
-	wg := input.wg
+type client struct {
+	ctx       context.Context
+	projectID string
+	opts      []option.ClientOption
+}
 
+func (client *client) Client() (*bigquery.Client, error) {
+	return bigquery.NewClient(client.ctx, client.projectID, client.opts...)
+}
+
+// checkInitialPos helps in creating the query to fetch data from endpoint
+func (s *Source) checkInitialPos() (firstSync, userDefinedOffset, userDefinedKey bool) {
+	// if its the firstSync no offset is applied
+	if s.getPosition() == "" {
+		firstSync = true
+	}
+
+	// if incrementColName set - we orderBy the provided column name
+	if len(s.sourceConfig.Config.IncrementColName) > 0 {
+		userDefinedOffset = true
+	}
+
+	// if primaryColName set - we orderBy the provided column name
+	if len(s.sourceConfig.Config.PrimaryKeyColName) > 0 {
+		userDefinedKey = true
+	}
+
+	return
+}
+
+func (s *Source) getPosition() string {
+	s.position.lock.Lock()
+	defer s.position.lock.Unlock()
+	return s.position.positions
+}
+
+// ReadGoogleRow fetches data from endpoint. It creates sdk.record and puts it in response channel
+func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
+	sdk.Logger(ctx).Trace().Msg("Inside read google row")
+	var userDefinedOffset, userDefinedKey, firstSync bool
+
+	offset := s.getPosition()
+	tableID := s.sourceConfig.Config.TableID
+
+	firstSync, userDefinedOffset, userDefinedKey = s.checkInitialPos()
 	lastRow := false
-	offset := position.Offset
 
-	defer wg.Done()
 	for {
 		// Keep on reading till end of table
-		sdk.Logger(s.Ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
+		sdk.Logger(ctx).Trace().Str("tableID", tableID).Msg("inside read google row infinite for loop")
 		if lastRow {
-			sdk.Logger(s.Ctx).Trace().Str("tableID", tableID).Msg("Its the last row. Done processing table")
+			sdk.Logger(ctx).Trace().Str("tableID", tableID).Msg("Its the last row. Done processing table")
 			break
 		}
 
 		counter := 0
 		// iterator
-		it, err := s.runGetRow(offset, tableID)
+		it, err := s.getRowIterator(ctx, offset, tableID, firstSync)
 		if err != nil {
-			sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 			return err
 		}
 
 		for {
 			var row []bigquery.Value
-			// select statement to make sure channel was not closed by teardown stage
-			select {
-			case <-s.iteratorClosed:
-				sdk.Logger(s.Ctx).Trace().Msg("recieved closed channel")
-				return nil
-			default:
-				sdk.Logger(s.Ctx).Trace().Msg("iterator running")
-			}
 
 			err := it.Next(&row)
-			Schema := it.Schema
+			schema := it.Schema
 
 			if err == iterator.Done {
-				sdk.Logger(s.Ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
+				sdk.Logger(ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
 				if counter < googlebigquery.CounterLimit {
 					// if counter is smaller than the limit we have reached the end of
 					// iterator. And will break the for loop now.
@@ -90,106 +115,175 @@ func (s *Source) ReadGoogleRow(rowInput chan readRowInput, responseCh chan sdk.R
 				break
 			}
 			if err != nil {
-				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error while iterating")
+				sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error while iterating")
 				return err
 			}
 
-			offset++
-			position := Position{
-				TableID: tableID,
-				Offset:  offset,
+			data := make(sdk.StructuredData)
+			var key string
+
+			for i, r := range row {
+				// handle dates
+				if schema[i].Type == bigquery.TimestampFieldType {
+					dateR := fmt.Sprintf("%v", r)
+					dateLocal, err := time.Parse("2006-01-02 15:04:05.999999 -0700 MST", dateR)
+					if err != nil {
+						sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while converting to time format")
+						return err
+					}
+					r = dateLocal.Format("2006-01-02 15:04:05.999999 MST")
+				}
+				data[schema[i].Name] = r
+
+				// if we have found the user provided incremental key that would be used as offset
+				if userDefinedOffset {
+					if schema[i].Name == s.sourceConfig.Config.IncrementColName {
+						offset = fmt.Sprint(data[schema[i].Name])
+						offset = getType(schema[i].Type, offset)
+					}
+				} else {
+					offset, err = calcOffset(firstSync, offset)
+					if err != nil {
+						sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
+						continue
+					}
+				}
+
+				// if we have found the user provided incremental key that would be used as offset
+				if userDefinedKey {
+					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColName {
+						key = fmt.Sprintf("%v", data[schema[i].Name])
+					}
+				}
 			}
 
-			counter++
-			recPosition, err := json.Marshal(&position)
-			if err != nil {
-				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
+			buffer := &bytes.Buffer{}
+			if err := gob.NewEncoder(buffer).Encode(key); err != nil {
+				sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error marshalling key")
 				continue
 			}
+			byteKey := buffer.Bytes()
+
+			counter++
+			firstSync = false
 
 			// keep the track of last rows fetched for each table.
 			// this helps in implementing incremental syncing.
-			s.wrtieLatestPosition(position)
-
-			data := make(sdk.StructuredData)
-			for i, r := range row {
-				data[Schema[i].Name] = r
+			recPosition, err := s.writePosition(offset)
+			if err != nil {
+				sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error marshalling data")
+				continue
 			}
 
 			record := sdk.Record{
 				CreatedAt: time.Now().UTC(),
 				Payload:   data,
+				Key:       sdk.RawData(byteKey),
 				Position:  recPosition}
 
-			responseCh <- record
+			// select statement to make sure channel was not closed by teardown stage
+			if s.iteratorClosed {
+				sdk.Logger(ctx).Trace().Msg("recieved closed channel")
+				return nil
+			}
+			s.records <- record
 		}
 	}
 	return
 }
 
-func (s *Source) wrtieLatestPosition(postion Position) {
-	s.LatestPositions.lock.Lock()
-	s.LatestPositions.LatestPositions[postion.TableID] = postion
-	s.LatestPositions.lock.Unlock()
+func calcOffset(firstSync bool, offset string) (string, error) {
+	// if user doesn't provide any incremental key we manually create offsets to pull data
+	if firstSync {
+		offset = "0"
+	}
+	offsetInt, err := strconv.Atoi(offset)
+	if err != nil {
+		return offset, err
+	}
+	offsetInt++
+	offset = fmt.Sprintf("%d", offsetInt)
+	return offset, err
 }
 
-// runGetRow sync data for bigquery using bigquery client jobs
-func (s *Source) runGetRow(offset int, tableID string) (it *bigquery.RowIterator, err error) {
-	q := s.BQReadClient.Query(
-		"SELECT * FROM `" + s.SourceConfig.Config.ConfigProjectID + "." + s.SourceConfig.Config.ConfigDatasetID + "." + tableID + "` " +
-			"LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + strconv.Itoa(offset))
+func getType(fieldType bigquery.FieldType, offset string) string {
+	switch fieldType {
+	case bigquery.IntegerFieldType:
+		return offset
+	case bigquery.FloatFieldType:
+		return offset
+	case bigquery.NumericFieldType:
+		return offset
+	case bigquery.BigNumericFieldType:
+		return offset
+	case bigquery.TimeFieldType:
+		return fmt.Sprintf("'%s'", offset)
 
-	sdk.Logger(s.Ctx).Trace().Str("q ", q.Q)
-	q.Location = s.SourceConfig.Config.ConfigLocation
+	default:
+		return fmt.Sprintf("'%s'", offset)
+	}
+}
 
-	job, err := q.Run(s.tomb.Context(s.Ctx))
+// writePosition prevents race condition happening while using map inside goroutine
+func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
+	s.position.lock.Lock()
+	defer s.position.lock.Unlock()
+	s.position.positions = offset
+	return json.Marshal(&s.position.positions)
+}
+
+// getRowIterator sync data for bigquery using bigquery client jobs
+func (s *Source) getRowIterator(ctx context.Context, offset string, tableID string, firstSync bool) (it *bigquery.RowIterator, err error) {
+	// check for config `IncrementColNames`. User can provide the column name which
+	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
+
+	var query string
+	if len(s.sourceConfig.Config.IncrementColName) > 0 {
+		columnName := s.sourceConfig.Config.IncrementColName
+		if firstSync {
+			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
+				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
+		} else {
+			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` WHERE " + columnName +
+				" > " + offset + " ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
+		}
+	} else {
+		// add default value if none specified
+		if len(offset) == 0 {
+			offset = "0"
+		}
+		// if no incremental value provided using default offset which is created by incrementing a counter each time a row is sync.
+		query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
+			" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + offset
+	}
+
+	q := s.bqReadClient.Query(query)
+	sdk.Logger(ctx).Trace().Str("q ", q.Q)
+	q.Location = s.sourceConfig.Config.Location
+
+	job, err := q.Run(ctx)
 	if err != nil {
-		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running the job")
 		return it, err
 	}
 
-	status, err := job.Wait(s.tomb.Context(s.Ctx))
+	status, err := job.Wait(ctx)
 	if err != nil {
-		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
 	}
 
 	if err := status.Err(); err != nil {
-		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
 	}
 
-	it, err = job.Read(s.tomb.Context(s.Ctx))
+	it, err = job.Read(ctx)
 	if err != nil {
-		sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
 	}
 	return it, err
-}
-
-// listTables demonstrates iterating through the collection of tables in a given dataset.
-func (s *Source) listTables(projectID, datasetID string) ([]string, error) {
-	ctx := context.Background()
-	tables := []string{}
-
-	client, err := newClient(ctx, projectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
-	if err != nil {
-		return []string{}, fmt.Errorf("bigquery.NewClient: %v", err)
-	}
-	defer client.Close()
-
-	ts := client.Dataset(datasetID).Tables(ctx)
-	for {
-		t, err := ts.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return []string{}, err
-		}
-		tables = append(tables, t.TableID)
-	}
-	return tables, nil
 }
 
 // Next returns the next record from the buffer.
@@ -197,7 +291,7 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	select {
 	case <-s.tomb.Dead():
 		return sdk.Record{}, s.tomb.Err()
-	case r := <-s.SDKResponse:
+	case r := <-s.records:
 		return r, nil
 	case <-ctx.Done():
 		return sdk.Record{}, ctx.Err()
@@ -206,95 +300,38 @@ func (s *Source) Next(ctx context.Context) (sdk.Record, error) {
 	}
 }
 
-func fetchPos(s *Source, pos sdk.Position) (position Position) {
-	position = Position{TableID: "", Offset: 0}
-	err := json.Unmarshal(pos, &position)
-	if err != nil {
-		sdk.Logger(s.Ctx).Info().Str("err", err.Error()).Msg("Could not get position. Will start with offset 0")
-		position = Position{TableID: "", Offset: 0}
-	}
-	return position
-}
+// fetchPos unmarshal position
+func fetchPos(s *Source, pos sdk.Position) {
+	s.position.lock = new(sync.Mutex)
+	s.position.lock.Lock()
+	defer s.position.lock.Unlock()
+	s.position.positions = ""
 
-func getTables(s *Source) (err error) {
-	if s.SourceConfig.Config.ConfigTableID == "" {
-		s.Tables, err = s.listTables(s.SourceConfig.Config.ConfigProjectID, s.SourceConfig.Config.ConfigDatasetID)
-		if err != nil {
-			sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while listing table")
-		}
-	} else {
-		s.Tables = strings.SplitAfter(s.SourceConfig.Config.ConfigTableID, ",")
+	err := json.Unmarshal(pos, &s.position.positions)
+	if err != nil {
+		sdk.Logger(s.ctx).Info().Msg("Could not get position. Will start with offset 0")
 	}
-	return err
 }
 
 func (s *Source) runIterator() (err error) {
-	rowInput := make(chan readRowInput)
+	// Snapshot sync. Start were we left last
+	ctx := s.ctx
+	err = s.ReadGoogleRow(ctx)
+	if err != nil {
+		sdk.Logger(ctx).Trace().Str("err", err.Error()).Msg("error found while reading google row.")
+		return err
+	}
+
 	for {
 		select {
 		case <-s.tomb.Dying():
 			return s.tomb.Err()
 		case <-s.ticker.C:
-			sdk.Logger(s.Ctx).Trace().Msg("ticker started ")
-			// create new client everytime the new sync start. This make sure that new tables coming in are handled.
-			client, err := newClient(s.tomb.Context(s.Ctx), s.SourceConfig.Config.ConfigProjectID, option.WithCredentialsFile(s.SourceConfig.Config.ConfigServiceAccount))
+			sdk.Logger(ctx).Trace().Msg("ticker started ")
+			err = s.ReadGoogleRow(ctx)
 			if err != nil {
-				sdk.Logger(s.Ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
-				s.tomb.Kill(err)
-				return fmt.Errorf("bigquery.NewClient: %v", err)
-			}
-
-			s.BQReadClient = client
-
-			if err = getTables(s); err != nil {
-				sdk.Logger(s.Ctx).Trace().Str("err", err.Error()).Msg("error found while fetching tables. Need to stop proccessing ")
-				return err
-			}
-
-			foundTable := false
-
-			// if its an already running pipeling and we just
-			// want to check for any new rows. Send the offset as
-			// last position where we left.
-			if len(s.LatestPositions.LatestPositions) > 0 {
-				// wait group make sure that we start new iteration only
-				//  after the first iteration is completely done.
-				var wg sync.WaitGroup
-				for _, tableID := range s.Tables {
-					wg.Add(1)
-					position := s.LatestPositions.LatestPositions[tableID]
-
-					s.tomb.Go(func() (err error) {
-						sdk.Logger(s.Ctx).Trace().Str("position", position.TableID).Msg("The table ID inside go routine ")
-						return s.ReadGoogleRow(rowInput, s.SDKResponse)
-					})
-					rowInput <- readRowInput{tableID: tableID, position: position, wg: &wg}
-				}
-				wg.Wait()
-			} else {
-				// if the pipeline has been newly started and it was earlier synced.
-				// Then we want to skip all the tables which are already synced and
-				// pull only after specified position
-
-				var wg sync.WaitGroup
-
-				for _, tableID := range s.Tables {
-					wg.Add(1)
-					if !foundTable && s.Position.TableID != "" {
-						if s.Position.TableID != tableID {
-							continue
-						} else {
-							foundTable = true
-						}
-					}
-
-					s.tomb.Go(func() (err error) {
-						sdk.Logger(s.Ctx).Trace().Str("position", s.Position.TableID).Msg("The table ID inside go routine ")
-						return s.ReadGoogleRow(rowInput, s.SDKResponse)
-					})
-					rowInput <- readRowInput{tableID: tableID, position: s.Position, wg: &wg}
-				}
-				wg.Wait()
+				sdk.Logger(ctx).Trace().Msg(fmt.Sprintf("error found %v", err))
+				return
 			}
 		}
 	}
