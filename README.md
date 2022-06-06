@@ -2,12 +2,12 @@
 [Conduit](https://conduit.io) for BigQuery.
 
 #### Source
-A source connector pulls data from bigquery and pushes it to downstream resources via Conduit.
+A source connector pulls data from BigQuery and pushes it to downstream resources via Conduit.
 
 ### Implementation
-The connector pulls data from bigquery for a dataset or selected tables of users choice. The connector syncs incrementally this means
+The connector pulls data from BigQuery for a dataset or selected tables of users choice. The connector syncs incrementally this means
 it keeps on looking for new insertion/updation happening every time interval user specified in any of the table the data is pulled for and syncs it. 
-If the conduit stops or pauses midway the connector will make sure to pull the data which was not pull earlier. 
+If the Conduit stops or pauses midway the connector will make sure to pull the data which was not pull earlier. 
 
 for eg,
 - table A and table B are synced.
@@ -18,17 +18,16 @@ for eg,
 Run `make build` to build the connector.
 
 ### Configuration
-[comment]: <> (fix table format and spacing)
 | name |  description | required | default value |
 |------|--------------|----------|---------------|
-|`serviceAccount`|Path to service account file with access to project. ref: https://cloud.google.com/docs/authentication/getting-started|true| - |
+|`serviceAccount`| service account with access to project. ref: https://cloud.google.com/docs/authentication/getting-started|true| - |
 |`projectID`| The Project ID on endpoint|true| - |
 |`datasetID`|The dataset ID to pull data from.|true| - |
 |`tableID`|Specify comma separated table IDs. Will pull whole dataset if no Table ID present. |false|all tables in dataset|
 |`datasetLocation`|Specify location were dataset exist|true| - |
 |`pollingTime`|Specify time foramtted as a time.Duration string, after which polling of data should be done. For eg, "2s", "500ms"|false|5m|
-|`incrementingColumnName`|Specify the column name which provide visibility about newer row or newer updates. It can be either `updated_at` timestamp which specifies when the table was last updated. It can be a `ID` of type int or float whose value increases with every new record coming in. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering.|false| - |
-|`primaryKeyColName`|Specify the primary key column name. eg, `ID` of type int or float or any primary key. User need to provide column name for each table in a format - 'tableID:columnName,tableID:columnName' without any spaces Eg: 'table1:created_by,table2:id' where created_by and id are column names. Table with no value will be pulled without any ordering. This field is recommended|false| - |
+|`incrementingColumnName`|Specify the column name which provide visibility about newer row or newer updates. It can be either `updated_at` timestamp which specifies when the table was last updated. It can be a `ID` of type int or float whose value increases with every new record coming in. User need to provide column name for table in a format - 'columnName' without any spaces Eg: 'created_by' where created_by is column name. Table with no value will be pulled without any ordering.|false| - |
+|`primaryKeyColName`|Specify the primary key column name. eg, `ID` of type int or float or any primary key. User need to provide column name for each table in a format - 'columnName' without any spaces Eg: 'created_by' where created_by is column name. |true| - |
 
 ### How to configure
 Create a connector using - `POST /v1/connectors` API
@@ -56,7 +55,9 @@ Sample payload-
  ```
 
 ### Testing
-Run `make test` to run all the unit tests. To run the test cases export - `SERVICE_ACCOUNT` and `PROJECT_ID`
+Run `make test` to run all the unit tests. To run the test cases export environment variable - `GOOGLE_SERVICE_ACCOUNT` and `GOOGLE_PROJECT_ID` where,
+- `GOOGLE_SERVICE_ACCOUNT` is the value in google service account file.  refer: https://cloud.google.com/docs/authentication/getting-started to create a service account
+- `GOOGLE_PROJECT_ID` is  the ID of projects whose tables data is to be synced
 
 ### Known Issues & Limitations
 * Current implementation handles snapshot and incremental data.
