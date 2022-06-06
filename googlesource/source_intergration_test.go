@@ -92,14 +92,12 @@ func dataSetup(t *testing.T) (err error) {
 	return nil
 }
 
-// dataSetupWithRecord Initial setup required - project with service account.
-func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
+func createDatasetForAcceptance(t *testing.T, tableID string) (err error) {
 	ctx := context.Background()
-	tableID := config[googlebigquery.ConfigTableID]
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
-		return result, fmt.Errorf("bigquery.NewClient: %v", err)
+		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 	defer client.Close()
 
@@ -109,12 +107,12 @@ func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Re
 
 	// create dataset
 	if err := client.Dataset(datasetID).Create(ctx, meta); err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return result, err
+		return err
 	}
 	t.Log("Dataset created")
 	client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
-		return result, fmt.Errorf("bigquery.NewClient: %v", err)
+		return fmt.Errorf("bigquery.NewClient: %v", err)
 	}
 	defer client.Close()
 
@@ -130,8 +128,21 @@ func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Re
 	tableRef := client.Dataset(datasetID).Table(tableID)
 	err = tableRef.Create(ctx, metaData)
 	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return result, err
+		return err
 	}
+	return
+}
+
+// dataSetupWithRecord Initial setup required - project with service account.
+func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
+	ctx := context.Background()
+	tableID := config[googlebigquery.ConfigTableID]
+
+	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
+	if err != nil {
+		return result, fmt.Errorf("bigquery.NewClient: %v", err)
+	}
+	defer client.Close()
 
 	var query string
 	positions := ""
