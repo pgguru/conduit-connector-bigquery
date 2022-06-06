@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -95,10 +94,6 @@ func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 		counter := 0
 		// iterator
 		it, err := s.getRowIterator(ctx, offset, tableID, firstSync)
-		if err != nil && strings.Contains(err.Error(), "Not found") {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("Error while running job")
-			return nil
-		}
 		if err != nil {
 			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 			return err

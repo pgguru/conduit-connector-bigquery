@@ -48,6 +48,12 @@ func TestAcceptance(t *testing.T) {
 				goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"), // indirect leak from dependency go.opencensus.io
 				goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
 			},
+			BeforeTest: func(t *testing.T) {
+				err := createDatasetForAcceptance(t, cfg[googlebigquery.ConfigTableID])
+				if err != nil {
+					fmt.Println("Error found")
+				}
+			},
 			AfterTest: func(t *testing.T) {
 				err := cleanupDataset(t, []string{cfg[googlebigquery.ConfigTableID]})
 				if err != nil {
