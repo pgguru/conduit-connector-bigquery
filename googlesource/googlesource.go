@@ -156,9 +156,7 @@ func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 
 				// if we have found the user provided incremental key that would be used as offset
 				if userDefinedKey {
-					if schema[i].Name == s.sourceConfig.Config.PrimaryKeyColName {
-						key = fmt.Sprintf("%v", data[schema[i].Name])
-					}
+					key = matchColumnName(schema[i].Name, s.sourceConfig.Config.PrimaryKeyColName, data)
 				}
 			}
 
@@ -195,6 +193,13 @@ func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 		}
 	}
 	return
+}
+
+func matchColumnName(dataName, columnName string, data sdk.StructuredData) (key string) {
+	if dataName == columnName {
+		key = fmt.Sprintf("%v", data[dataName])
+	}
+	return key
 }
 
 func calcOffset(firstSync bool, offset string) (string, error) {
