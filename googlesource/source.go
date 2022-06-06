@@ -32,34 +32,23 @@ type Source struct {
 	sdk.UnimplementedSource
 	bqReadClient *bigquery.Client
 	sourceConfig googlebigquery.SourceConfig
-	// haris: isn't this part of config?
-	// Neha : TableID is optional in config. If not provided we need to find them and then insert as
-	// array instead of a string. So that can be iterated easily.
-	tables []string
-	// do we need Ctx? we have it in all the methods as a param
-	// Neha: for all the function running in goroutine we needed the ctx value. To provide the current
+	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
 	ctx            context.Context
 	records        chan sdk.Record
-	positions      positions
+	position       position
 	ticker         *time.Ticker
 	tomb           *tomb.Tomb
-	iteratorClosed chan bool
+	iteratorClosed bool
+	// interface to provide BigQuery client. In testing this will be used to mock the client
+	clientType clientFactory
 }
 
-// positions struct to maintain syncing status of tables
-type positions struct {
-	// position - map of tableIds and corresponding last position synced
-	positions map[string]string
-	// lock for goroutine safe access of position
-	lock *sync.Mutex
-}
-
-type Key struct {
-	TableID string
-	// can we use a page token instead?
-	// Neha: Will check it
-	Offset string
+// position faces race condition. So will always use it inside lock. Write and Read happens on same time.
+// Ref issue- https://github.com/neha-Gupta1/conduit-connector-bigquery/issues/26
+type position struct {
+	lock      *sync.Mutex
+	positions string
 }
 
 func NewSource() sdk.Source {
@@ -75,6 +64,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	}
 
 	s.sourceConfig = sourceConfig
+	s.clientType = &client{ctx: ctx, projectID: s.sourceConfig.Config.ProjectID, opts: []option.ClientOption{option.WithCredentialsJSON([]byte(s.sourceConfig.Config.ServiceAccount))}}
 	return nil
 }
 
@@ -82,27 +72,28 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.ctx = ctx
 	fetchPos(s, pos)
 
+	pollingTime := googlebigquery.PollingTime
+
 	// s.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
 	s.records = make(chan sdk.Record, 100)
-	s.iteratorClosed = make(chan bool, 2)
+	s.iteratorClosed = false
 
 	if len(s.sourceConfig.Config.PollingTime) > 0 {
-		googlebigquery.PollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime)
+		pollingTime, err = time.ParseDuration(s.sourceConfig.Config.PollingTime)
 		if err != nil {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
+			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
 			return errors.New("invalid polling time duration provided")
 		}
 	}
 
-	s.ticker = time.NewTicker(googlebigquery.PollingTime)
+	s.ticker = time.NewTicker(pollingTime)
 	s.tomb = &tomb.Tomb{}
-
-	client, err := newClient(s.tomb.Context(s.ctx), s.sourceConfig.Config.ProjectID, option.WithCredentialsFile(s.sourceConfig.Config.ServiceAccount))
+	client, err := s.clientType.Client()
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
-		s.tomb.Kill(err)
-		return fmt.Errorf("bigquery.NewClient: %v", err)
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
+		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
+		return clientErr
 	}
 
 	s.bqReadClient = client
@@ -130,27 +121,25 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	// TODO: understand why handling the closing of iterator fails the plugin
-
-	// s.iteratorClosed <- true
-	// sdk.Logger(s.ctx).Error().Msg("Teardown: closing all channels")
+	s.iteratorClosed = true
 
 	if s.records != nil {
 		close(s.records)
 	}
 	err := s.StopIterator()
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing bigquery client")
+		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
 		return err
 	}
 	return nil
 }
 
 func (s *Source) StopIterator() error {
+	s.iteratorClosed = true
 	if s.bqReadClient != nil {
 		err := s.bqReadClient.Close()
 		if err != nil {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing bigquery client")
+			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
 			return err
 		}
 	}

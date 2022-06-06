@@ -22,8 +22,8 @@ import (
 func Specification() sdk.Specification {
 	return sdk.Specification{
 		Name:        "bigquery",
-		Summary:     "A bigquery source plugin for Conduit, written in Go.",
-		Description: "A plugin to fetch data from google bigquery",
+		Summary:     "A BigQuery source plugin for Conduit, written in Go.",
+		Description: "A plugin to fetch data from google BigQuery",
 		Version:     "v0.1.0",
 		Author:      "Neha Gupta",
 		SourceParams: map[string]sdk.Parameter{
@@ -49,8 +49,8 @@ func Specification() sdk.Specification {
 			},
 			ConfigTableID: {
 				Default:     "",
-				Required:    false,
-				Description: "Google Bigqueries table ID. Can provide `,` separated ID. Will pull whole dataset if no tableID provided.",
+				Required:    true,
+				Description: "Google Bigqueries table ID.",
 			},
 			ConfigPollingTime: {
 				Default:     "5",
@@ -62,14 +62,14 @@ func Specification() sdk.Specification {
 				Required: false,
 				Description: `Column name which provides visibility about newer rows. For eg, updated_at column which stores when the row was last updated\n
 				primary key with incremental value say id of type int or float.  \n eg value,
-				 tableid:columnName,tableid:columnName,...`,
+				 updated_at`,
 			},
 			ConfigPrimaryKeyColName: {
 				Default:  "",
 				Required: false,
 				Description: `Column name which provides visibility about uniqueness. For eg, _id which stores \n
 				primary key with incremental value say id of type int or float.  \n eg value,
-				 tableid:columnName,tableid:columnName,...`,
+				 id`,
 			},
 		},
 	}
