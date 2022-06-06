@@ -45,7 +45,7 @@ func TestAcceptance(t *testing.T) {
 			},
 			SourceConfig: cfg,
 			GoleakOptions: []goleak.Option{
-				goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"), //indirect leak from dependency go.opencensus.io
+				goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"), // indirect leak from dependency go.opencensus.io
 				goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
 			},
 			AfterTest: func(t *testing.T) {
