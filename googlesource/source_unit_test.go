@@ -16,6 +16,7 @@ package googlesource
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -194,45 +195,45 @@ func (client *mockClient) Client() (*bigquery.Client, error) {
 	return nil, fmt.Errorf("mock error")
 }
 
-// func TestInvalid(t *testing.T) {
-// 	googlebigquery.PollingTime = time.Second * 1
+func TestInvalid(t *testing.T) {
+	googlebigquery.PollingTime = time.Second * 1
 
-// 	src := Source{}
-// 	cfg := map[string]string{}
-// 	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
-// 	cfg[googlebigquery.ConfigProjectID] = projectID
-// 	cfg[googlebigquery.ConfigDatasetID] = datasetID
-// 	cfg[googlebigquery.ConfigTableID] = tableID
-// 	cfg[googlebigquery.ConfigLocation] = location
-// 	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
+	src := Source{}
+	cfg := map[string]string{}
+	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
+	cfg[googlebigquery.ConfigProjectID] = projectID
+	cfg[googlebigquery.ConfigDatasetID] = datasetID
+	cfg[googlebigquery.ConfigTableID] = tableID
+	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
 
-// 	ctx := context.Background()
-// 	err := src.Configure(ctx, cfg)
-// 	if err != nil {
-// 		t.Errorf("expected no error, got %v", err)
-// 	}
+	ctx := context.Background()
+	err := src.Configure(ctx, cfg)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
 
-// 	pos, err := json.Marshal(fmt.Sprintf("%d", 46))
-// 	if err != nil {
-// 		t.Log(err)
-// 	}
-// 	src.clientType = &mockClient{}
-// 	err = src.Open(ctx, pos)
-// 	if err == nil {
-// 		t.Errorf("expected error, got %v", err)
-// 	}
+	pos, err := json.Marshal(fmt.Sprintf("%d", 46))
+	if err != nil {
+		t.Log(err)
+	}
+	src.clientType = &mockClient{}
+	err = src.Open(ctx, pos)
+	if err == nil {
+		t.Errorf("expected error, got %v", err)
+	}
 
-// 	time.Sleep(15 * time.Second)
-// 	_, err = src.Read(ctx)
-// 	if err == nil {
-// 		t.Errorf("should have recieved error while pulling data")
-// 	}
+	time.Sleep(15 * time.Second)
+	_, err = src.Read(ctx)
+	if err == nil {
+		t.Errorf("should have recieved error while pulling data")
+	}
 
-// 	err = src.Teardown(ctx)
-// 	if err != nil {
-// 		t.Errorf("expected no error, got %v", err)
-// 	}
-// }
+	err = src.Teardown(ctx)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
 
 func TestInvalidOrderByName(t *testing.T) {
 	err := dataSetup(t)

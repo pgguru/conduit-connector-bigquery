@@ -33,7 +33,7 @@ import (
 
 // clientFactory provides function to create BigQuery Client
 type clientFactory interface {
-	Client() (bqClient, error)
+	Client() (*bigquery.Client, error)
 }
 
 type client struct {
@@ -42,7 +42,7 @@ type client struct {
 	opts      []option.ClientOption
 }
 
-func (client *client) Client() (bqClient, error) {
+func (client *client) Client() (*bigquery.Client, error) {
 	return bigquery.NewClient(client.ctx, client.projectID, client.opts...)
 }
 
@@ -55,11 +55,11 @@ type bqClientStruct struct {
 	client *bigquery.Client
 }
 
-func (bq *bqClientStruct) Query(q string) *bigquery.Query {
+func (bq bqClientStruct) Query(q string) *bigquery.Query {
 	return bq.client.Query(q)
 }
 
-func (bq *bqClientStruct) Close() error {
+func (bq bqClientStruct) Close() error {
 	return bq.client.Close()
 }
 
