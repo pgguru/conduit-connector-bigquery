@@ -41,8 +41,8 @@ func TestAcceptance(t *testing.T) {
 		googlebigquery.ConfigDatasetID:          datasetID,
 		googlebigquery.ConfigTableID:            "table_acceptance",
 		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigPrimaryKeyColName:  "name",
-		googlebigquery.ConfigIncrementalColName: "name",
+		googlebigquery.ConfigPrimaryKeyColName:  "created_at",
+		googlebigquery.ConfigIncrementalColName: "created_at",
 		googlebigquery.ConfigPollingTime:        "1ms",
 	}
 
@@ -135,8 +135,8 @@ func createTableForAcceptance(t *testing.T, client *bigquery.Client, tableID str
 	ctx := context.Background()
 
 	sampleSchema := bigquery.Schema{
-		{Name: "abb", Type: bigquery.StringFieldType},
 		{Name: "name", Type: bigquery.StringFieldType},
+		{Name: "created_at", Type: bigquery.TimestampFieldType},
 	}
 
 	metaData := &bigquery.TableMetadata{
@@ -166,15 +166,17 @@ func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Re
 	positions := ""
 
 	for i := 0; i < len(record); i++ {
-		name := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
-		abb := fmt.Sprintf("name%v", time.Now().AddDate(0, 0, globalCounter).Format("20060102150405"))
-		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + abb + "' , '" + name + "')"
+		created_at := time.Now().AddDate(0, 0, globalCounter).UTC()
+		name := fmt.Sprintf("name%v", globalCounter)
+		created_at_bq_format := created_at.Format("2006-01-02 15:04:05.999999 MST")
+
+		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + name + "' , '" + created_at_bq_format + "')"
 
 		data := make(sdk.StructuredData)
-		data["abb"] = abb
 		data["name"] = name
+		data["created_at"] = created_at_bq_format
 
-		key := name
+		key := created_at_bq_format
 
 		buffer := &bytes.Buffer{}
 		if err := gob.NewEncoder(buffer).Encode(key); err != nil {
@@ -182,7 +184,7 @@ func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Re
 		}
 		byteKey := buffer.Bytes()
 
-		positions = fmt.Sprintf("'%s'", name)
+		positions = fmt.Sprintf("'%s'", created_at_bq_format)
 		positionRecord, err := json.Marshal(&positions)
 		if err != nil {
 			t.Log("error found", err)
