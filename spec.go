@@ -30,7 +30,7 @@ func Specification() sdk.Specification {
 			ConfigServiceAccount: {
 				Default:     "",
 				Required:    true,
-				Description: "Path to service account key with data pulling access.", // We can also take it as value if required
+				Description: "service account key file with data pulling access. ref: https://cloud.google.com/docs/authentication/getting-started", // We can also take it as value if required
 			},
 			ConfigProjectID: {
 				Default:     "",

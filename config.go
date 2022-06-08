@@ -63,6 +63,7 @@ var (
 	// CounterLimit sets limit of how many rows will be fetched in each job
 	CounterLimit = 500
 	PollingTime  = time.Minute * 5
+	TimeoutTime  = time.Second * 120
 )
 
 // SourceConfig is config for source
