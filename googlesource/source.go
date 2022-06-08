@@ -94,8 +94,8 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
 		return clientErr
 	}
-
-	s.bqReadClient = client
+	bqClient := bqClientStruct{client: client}
+	s.bqReadClient = bqClient
 
 	s.tomb.Go(s.runIterator)
 	sdk.Logger(ctx).Trace().Msg("end of function: open")
