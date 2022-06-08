@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/option"
@@ -30,7 +29,7 @@ import (
 
 type Source struct {
 	sdk.UnimplementedSource
-	bqReadClient *bigquery.Client
+	bqReadClient bqClient //*bigquery.Client
 	sourceConfig googlebigquery.SourceConfig
 	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
