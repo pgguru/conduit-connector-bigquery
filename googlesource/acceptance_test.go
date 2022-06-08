@@ -166,17 +166,17 @@ func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Re
 	positions := ""
 
 	for i := 0; i < len(record); i++ {
-		created_at := time.Now().AddDate(0, 0, globalCounter).UTC()
+		createdAt := time.Now().AddDate(0, 0, globalCounter).UTC()
 		name := fmt.Sprintf("name%v", globalCounter)
-		created_at_bq_format := created_at.Format("2006-01-02 15:04:05.999999 MST")
+		createdAtBQFormat := createdAt.Format("2006-01-02 15:04:05.999999 MST")
 
-		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + name + "' , '" + created_at_bq_format + "')"
+		query = "INSERT INTO `" + projectID + "." + datasetID + "." + tableID + "`  values ('" + name + "' , '" + createdAtBQFormat + "')"
 
 		data := make(sdk.StructuredData)
 		data["name"] = name
-		data["created_at"] = created_at_bq_format
+		data["created_at"] = createdAtBQFormat
 
-		key := created_at_bq_format
+		key := createdAtBQFormat
 
 		buffer := &bytes.Buffer{}
 		if err := gob.NewEncoder(buffer).Encode(key); err != nil {
@@ -184,7 +184,7 @@ func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Re
 		}
 		byteKey := buffer.Bytes()
 
-		positions = fmt.Sprintf("'%s'", created_at_bq_format)
+		positions = fmt.Sprintf("'%s'", createdAtBQFormat)
 		positionRecord, err := json.Marshal(&positions)
 		if err != nil {
 			t.Log("error found", err)
