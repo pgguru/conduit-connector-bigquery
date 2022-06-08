@@ -33,7 +33,7 @@ import (
 
 // clientFactory provides function to create BigQuery Client
 type clientFactory interface {
-	Client() (*bigquery.Client, error)
+	Client() (bqClient, error)
 }
 
 type client struct {
@@ -42,8 +42,25 @@ type client struct {
 	opts      []option.ClientOption
 }
 
-func (client *client) Client() (*bigquery.Client, error) {
+func (client *client) Client() (bqClient, error) {
 	return bigquery.NewClient(client.ctx, client.projectID, client.opts...)
+}
+
+type bqClient interface {
+	Query(q string) *bigquery.Query
+	Close() error
+}
+
+type bqClientStruct struct {
+	client *bigquery.Client
+}
+
+func (bq *bqClientStruct) Query(q string) *bigquery.Query {
+	return bq.client.Query(q)
+}
+
+func (bq *bqClientStruct) Close() error {
+	return bq.client.Close()
 }
 
 // checkInitialPos helps in creating the query to fetch data from endpoint
