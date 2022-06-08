@@ -33,7 +33,7 @@ Run `make build` to build the connector.
 Create a connector using - `POST /v1/connectors` API
 
 Sample payload-
-``***REMOVED***
+```{
    "config": {
      "name": "google_bigQuery",
      "settings": {
