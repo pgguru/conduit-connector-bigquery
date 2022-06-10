@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"testing"
@@ -36,7 +37,6 @@ var (
 	tableID          = "conduit_test_table"
 	tableIDTimeStamp = "conduit_test_table_time_stamp"
 	location         = "US"
-	globalCounter    = 0
 )
 
 // Initial setup required - project with service account.
@@ -221,7 +221,7 @@ func cleanupDataset(t *testing.T, tables []string) (err error) {
 
 	if err = client.Dataset(datasetID).Delete(ctx); err != nil {
 		// dataset could already be in use. it is okay if it does not get deleted
-		t.Log("Error in delete: ", err)
+		log.Println("Error in delete: ", err)
 		return err
 	}
 	return err
@@ -263,7 +263,7 @@ func TestSuccessTimeIncremental(t *testing.T) {
 	if err != nil {
 		t.Log("error: ", err)
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(15 * time.Second)
 	for {
 		_, err := src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
@@ -339,7 +339,7 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 	if err != nil {
 		t.Log("error: ", err)
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(15 * time.Second)
 	for {
 		_, err = src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
@@ -388,9 +388,9 @@ func TestSuccessPrimaryKey(t *testing.T) {
 
 	err = src.Open(ctx, pos)
 	if err != nil {
-		t.Log("error: ", err)
+		t.Log("errror: ", err)
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(15 * time.Second)
 	for {
 		_, err = src.Read(ctx)
 		if err != nil && err == sdk.ErrBackoffRetry {
@@ -558,7 +558,7 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		t.Log("errror: ", err)
 		t.Errorf("some other error found: %v", err)
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	for {
 		_, err := src.Read(ctx)
