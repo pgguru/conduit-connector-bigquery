@@ -29,7 +29,7 @@ import (
 
 type Source struct {
 	sdk.UnimplementedSource
-	bqReadClient bqClient //*bigquery.Client
+	bqReadClient bqClient
 	sourceConfig googlebigquery.SourceConfig
 	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
