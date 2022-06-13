@@ -269,7 +269,7 @@ func TestInvalidOrderByName(t *testing.T) {
 type mockBQClientStruct struct {
 }
 
-func (bq mockBQClientStruct) Query(s *Source, query string) (it rowIteratorI, err error) {
+func (bq mockBQClientStruct) Query(s *Source, query string) (it rowIterator, err error) {
 	return nil, fmt.Errorf("mock error")
 }
 

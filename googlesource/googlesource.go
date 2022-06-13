@@ -47,7 +47,7 @@ func (client *client) Client() (*bigquery.Client, error) {
 }
 
 type bqClient interface {
-	Query(s *Source, query string) (it rowIteratorI, err error)
+	Query(s *Source, query string) (it rowIterator, err error)
 	Close() error
 }
 
@@ -55,7 +55,7 @@ type bqClientStruct struct {
 	client *bigquery.Client
 }
 
-func (bq bqClientStruct) Query(s *Source, query string) (it rowIteratorI, err error) {
+func (bq bqClientStruct) Query(s *Source, query string) (it rowIterator, err error) {
 	ctx := s.ctx
 	q := bq.client.Query(query)
 	sdk.Logger(ctx).Trace().Str("q ", q.Q)
@@ -83,7 +83,7 @@ func (bq bqClientStruct) Query(s *Source, query string) (it rowIteratorI, err er
 		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
 		return it, err
 	}
-	it = rowIterator{it: bqIter}
+	it = rowIter{it: bqIter}
 	return
 }
 
@@ -284,24 +284,24 @@ func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
 	return json.Marshal(&s.position.positions)
 }
 
-type rowIterator struct {
+type rowIter struct {
 	it *bigquery.RowIterator
 }
-type rowIteratorI interface {
+type rowIterator interface {
 	Next(dst interface{}) error
 	Schema() bigquery.Schema
 }
 
-func (iterator rowIterator) Schema() bigquery.Schema {
+func (iterator rowIter) Schema() bigquery.Schema {
 	return iterator.it.Schema
 }
 
-func (iterator rowIterator) Next(dst interface{}) error {
+func (iterator rowIter) Next(dst interface{}) error {
 	return iterator.it.Next(dst)
 }
 
 // getRowIterator sync data for bigquery using bigquery client jobs
-func (s *Source) getRowIterator(ctx context.Context, offset string, tableID string, firstSync bool) (it rowIteratorI, err error) {
+func (s *Source) getRowIterator(ctx context.Context, offset string, tableID string, firstSync bool) (it rowIterator, err error) {
 	// check for config `IncrementColNames`. User can provide the column name which
 	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
 
