@@ -47,7 +47,7 @@ func (client *client) Client() (*bigquery.Client, error) {
 }
 
 type bqClient interface {
-	Query(q string) *bigquery.Query
+	Query(s *Source, query string) (it rowIteratorI, err error)
 	Close() error
 }
 
@@ -55,8 +55,36 @@ type bqClientStruct struct {
 	client *bigquery.Client
 }
 
-func (bq bqClientStruct) Query(q string) *bigquery.Query {
-	return bq.client.Query(q)
+func (bq bqClientStruct) Query(s *Source, query string) (it rowIteratorI, err error) {
+	ctx := s.ctx
+	q := bq.client.Query(query)
+	sdk.Logger(ctx).Trace().Str("q ", q.Q)
+	q.Location = s.sourceConfig.Config.Location
+
+	job, err := q.Run(ctx)
+	if err != nil {
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running the job")
+		return it, err
+	}
+
+	status, err := job.Wait(ctx)
+	if err != nil {
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		return it, err
+	}
+
+	if err := status.Err(); err != nil {
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		return it, err
+	}
+
+	bqIter, err := job.Read(ctx)
+	if err != nil {
+		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
+		return it, err
+	}
+	it = rowIterator{it: bqIter}
+	return
 }
 
 func (bq bqClientStruct) Close() error {
@@ -120,7 +148,7 @@ func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 			var row []bigquery.Value
 
 			err := it.Next(&row)
-			schema := it.Schema
+			schema := it.Schema()
 
 			if err == iterator.Done {
 				sdk.Logger(ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
@@ -256,8 +284,24 @@ func (s *Source) writePosition(offset string) (recPosition []byte, err error) {
 	return json.Marshal(&s.position.positions)
 }
 
+type rowIterator struct {
+	it *bigquery.RowIterator
+}
+type rowIteratorI interface {
+	Next(dst interface{}) error
+	Schema() bigquery.Schema
+}
+
+func (iterator rowIterator) Schema() bigquery.Schema {
+	return iterator.it.Schema
+}
+
+func (iterator rowIterator) Next(dst interface{}) error {
+	return iterator.it.Next(dst)
+}
+
 // getRowIterator sync data for bigquery using bigquery client jobs
-func (s *Source) getRowIterator(ctx context.Context, offset string, tableID string, firstSync bool) (it *bigquery.RowIterator, err error) {
+func (s *Source) getRowIterator(ctx context.Context, offset string, tableID string, firstSync bool) (it rowIteratorI, err error) {
 	// check for config `IncrementColNames`. User can provide the column name which
 	// would be used as orderBy as well as incremental or offset value. Orderby is not mandatory though
 
@@ -281,33 +325,7 @@ func (s *Source) getRowIterator(ctx context.Context, offset string, tableID stri
 			" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + offset
 	}
 
-	q := s.bqReadClient.Query(query)
-	sdk.Logger(ctx).Trace().Str("q ", q.Q)
-	q.Location = s.sourceConfig.Config.Location
-
-	job, err := q.Run(ctx)
-	if err != nil {
-		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running the job")
-		return it, err
-	}
-
-	status, err := job.Wait(ctx)
-	if err != nil {
-		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
-		return it, err
-	}
-
-	if err := status.Err(); err != nil {
-		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
-		return it, err
-	}
-
-	it, err = job.Read(ctx)
-	if err != nil {
-		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("Error while running job")
-		return it, err
-	}
-	return it, err
+	return s.bqReadClient.Query(s, query)
 }
 
 // Next returns the next record from the buffer.

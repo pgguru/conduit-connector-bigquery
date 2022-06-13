@@ -267,11 +267,10 @@ func TestInvalidOrderByName(t *testing.T) {
 }
 
 type mockBQClientStruct struct {
-	client *bigquery.Client
 }
 
-func (bq mockBQClientStruct) Query(q string) *bigquery.Query {
-	return bq.client.Query(q)
+func (bq mockBQClientStruct) Query(s *Source, query string) (it rowIteratorI, err error) {
+	return nil, fmt.Errorf("mock error")
 }
 
 func (bq mockBQClientStruct) Close() error {
