@@ -265,3 +265,40 @@ func TestInvalidOrderByName(t *testing.T) {
 		t.Errorf("some other error found: %v", err)
 	}
 }
+
+type mockBQClientStruct struct {
+}
+
+func (bq mockBQClientStruct) Query(s *Source, query string) (it rowIterator, err error) {
+	return nil, fmt.Errorf("mock error")
+}
+
+func (bq mockBQClientStruct) Close() error {
+	return fmt.Errorf("mock error")
+}
+
+func TestInvalidCloseBQ(t *testing.T) {
+	googlebigquery.PollingTime = time.Second * 1
+
+	src := Source{}
+	cfg := map[string]string{}
+	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
+	cfg[googlebigquery.ConfigProjectID] = projectID
+	cfg[googlebigquery.ConfigDatasetID] = datasetID
+	cfg[googlebigquery.ConfigTableID] = tableID
+	cfg[googlebigquery.ConfigLocation] = location
+	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
+
+	ctx := context.Background()
+	err := src.Configure(ctx, cfg)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	src.bqReadClient = mockBQClientStruct{}
+	src.ctx = ctx
+
+	err = src.Teardown(ctx)
+	if err == nil {
+		t.Errorf("mock error expected, got %v", err)
+	}
+}

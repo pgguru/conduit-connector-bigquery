@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/option"
@@ -30,7 +29,7 @@ import (
 
 type Source struct {
 	sdk.UnimplementedSource
-	bqReadClient *bigquery.Client
+	bqReadClient bqClient
 	sourceConfig googlebigquery.SourceConfig
 	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
@@ -95,8 +94,8 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
 		return clientErr
 	}
-
-	s.bqReadClient = client
+	bqClient := bqClientStruct{client: client}
+	s.bqReadClient = bqClient
 
 	s.tomb.Go(s.runIterator)
 	sdk.Logger(ctx).Trace().Msg("end of function: open")
