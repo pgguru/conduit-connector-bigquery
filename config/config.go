@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package googlebigquery
+package config
 
 import (
 	"errors"
@@ -22,29 +22,29 @@ import (
 )
 
 const (
-	// ConfigProjectID is the config projectID
-	ConfigProjectID = "projectID"
+	// KeyProjectID is the config projectID
+	KeyProjectID = "projectID"
 
-	// ConfigDatasetID is the dataset ID
-	ConfigDatasetID = "datasetID"
+	// KeyDatasetID is the dataset ID
+	KeyDatasetID = "datasetID"
 
-	// ConfigTableID is the tableID
-	ConfigTableID = "tableID"
+	// KeyTableID is the tableID
+	KeyTableID = "tableID"
 
-	// ConfigServiceAccount path to service account key
-	ConfigServiceAccount = "serviceAccount"
+	// KeyServiceAccount path to service account key
+	KeyServiceAccount = "serviceAccount"
 
-	// ConfigLocation location of the dataset
-	ConfigLocation = "datasetLocation"
+	// KeyLocation location of the dataset
+	KeyLocation = "datasetLocation"
 
-	// ConfigPollingTime time after which polling should be done
-	ConfigPollingTime = "pollingTime"
+	// KeyPollingTime time after which polling should be done
+	KeyPollingTime = "pollingTime"
 
 	// ConfigOrderBy lets user decide
-	ConfigIncrementalColName = "incrementingColumnName"
+	KeyIncrementalColName = "incrementingColumnName"
 
-	// ConfigPrimaryKeyColName provide primary key
-	ConfigPrimaryKeyColName = "primaryKeyColName"
+	// KeyPrimaryKeyColName provide primary key
+	KeyPrimaryKeyColName = "primaryKeyColName"
 )
 
 // Config represents configuration needed for S3
@@ -78,39 +78,39 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		return SourceConfig{}, err
 	}
 
-	if _, ok := cfg[ConfigServiceAccount]; !ok {
+	if _, ok := cfg[KeyServiceAccount]; !ok {
 		return SourceConfig{}, errors.New("service account can't be blank")
 	}
 
-	if _, ok := cfg[ConfigProjectID]; !ok {
+	if _, ok := cfg[KeyProjectID]; !ok {
 		return SourceConfig{}, errors.New("project ID can't be blank")
 	}
 
-	if _, ok := cfg[ConfigDatasetID]; !ok {
+	if _, ok := cfg[KeyDatasetID]; !ok {
 		return SourceConfig{}, errors.New("dataset ID can't be blank")
 	}
 
-	if _, ok := cfg[ConfigLocation]; !ok {
+	if _, ok := cfg[KeyLocation]; !ok {
 		return SourceConfig{}, errors.New("location can't be blank")
 	}
 
-	if _, ok := cfg[ConfigTableID]; !ok {
+	if _, ok := cfg[KeyTableID]; !ok {
 		return SourceConfig{}, errors.New("tableID can't be blank")
 	}
 
-	if _, ok := cfg[ConfigPrimaryKeyColName]; !ok {
+	if _, ok := cfg[KeyPrimaryKeyColName]; !ok {
 		return SourceConfig{}, errors.New("primary key can't be blank")
 	}
 
 	config := Config{
-		ServiceAccount:    cfg[ConfigServiceAccount],
-		ProjectID:         cfg[ConfigProjectID],
-		DatasetID:         cfg[ConfigDatasetID],
-		TableID:           cfg[ConfigTableID],
-		Location:          cfg[ConfigLocation],
-		PollingTime:       cfg[ConfigPollingTime],
-		IncrementColName:  cfg[ConfigIncrementalColName],
-		PrimaryKeyColName: cfg[ConfigPrimaryKeyColName]}
+		ServiceAccount:    cfg[KeyServiceAccount],
+		ProjectID:         cfg[KeyProjectID],
+		DatasetID:         cfg[KeyDatasetID],
+		TableID:           cfg[KeyTableID],
+		Location:          cfg[KeyLocation],
+		PollingTime:       cfg[KeyPollingTime],
+		IncrementColName:  cfg[KeyIncrementalColName],
+		PrimaryKeyColName: cfg[KeyPrimaryKeyColName]}
 
 	return SourceConfig{
 		Config: config,

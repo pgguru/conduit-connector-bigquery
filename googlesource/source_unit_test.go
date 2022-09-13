@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/conduitio-labs/conduit-connector-bigquery/config"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"gopkg.in/tomb.v2"
 )
 
@@ -57,12 +57,12 @@ func TestSuccessfulTearDown(t *testing.T) {
 	src := Source{}
 	cfg := map[string]string{}
 
-	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
-	cfg[googlebigquery.ConfigProjectID] = projectID
-	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = tableID
-	cfg[googlebigquery.ConfigLocation] = location
-	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
+	cfg[config.KeyServiceAccount] = serviceAccount
+	cfg[config.KeyProjectID] = projectID
+	cfg[config.KeyDatasetID] = datasetID
+	cfg[config.KeyTableID] = tableID
+	cfg[config.KeyLocation] = location
+	cfg[config.KeyPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -98,13 +98,13 @@ func TestMultipleTables(t *testing.T) {
 	src := Source{}
 	cfg := map[string]string{}
 
-	googlebigquery.PollingTime = time.Second * 1
-	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
-	cfg[googlebigquery.ConfigProjectID] = projectID
-	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = tableID
-	cfg[googlebigquery.ConfigLocation] = location
-	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
+	config.PollingTime = time.Second * 1
+	cfg[config.KeyServiceAccount] = serviceAccount
+	cfg[config.KeyProjectID] = projectID
+	cfg[config.KeyDatasetID] = datasetID
+	cfg[config.KeyTableID] = tableID
+	cfg[config.KeyLocation] = location
+	cfg[config.KeyPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -127,14 +127,14 @@ func TestMultipleTables(t *testing.T) {
 func TestInvalidCreds(t *testing.T) {
 	src := Source{}
 	cfg := map[string]string{}
-	cfg[googlebigquery.ConfigServiceAccount] = "invalid"
-	cfg[googlebigquery.ConfigProjectID] = projectID
-	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = tableID
-	cfg[googlebigquery.ConfigLocation] = "test"
-	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
+	cfg[config.KeyServiceAccount] = "invalid"
+	cfg[config.KeyProjectID] = projectID
+	cfg[config.KeyDatasetID] = datasetID
+	cfg[config.KeyTableID] = tableID
+	cfg[config.KeyLocation] = "test"
+	cfg[config.KeyPrimaryKeyColName] = "post_abbr"
 
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 	ctx := context.Background()
 	err := src.Configure(ctx, cfg)
 	if err != nil {
@@ -196,16 +196,16 @@ func (client *mockClient) Client() (*bigquery.Client, error) {
 }
 
 func TestInvalid(t *testing.T) {
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 
 	src := Source{}
 	cfg := map[string]string{}
-	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
-	cfg[googlebigquery.ConfigProjectID] = projectID
-	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = tableID
-	cfg[googlebigquery.ConfigLocation] = location
-	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
+	cfg[config.KeyServiceAccount] = serviceAccount
+	cfg[config.KeyProjectID] = projectID
+	cfg[config.KeyDatasetID] = datasetID
+	cfg[config.KeyTableID] = tableID
+	cfg[config.KeyLocation] = location
+	cfg[config.KeyPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err := src.Configure(ctx, cfg)
@@ -250,12 +250,12 @@ func TestInvalidOrderByName(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:     serviceAccount,
-		googlebigquery.ConfigProjectID:          projectID,
-		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "post_abbr",
-		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr",
+		config.KeyServiceAccount:     serviceAccount,
+		config.KeyProjectID:          projectID,
+		config.KeyDatasetID:          datasetID,
+		config.KeyLocation:           location,
+		config.KeyIncrementalColName: "post_abbr",
+		config.KeyPrimaryKeyColName:  "post_abbr",
 	}
 
 	ctx := context.Background()
@@ -278,16 +278,16 @@ func (bq mockBQClientStruct) Close() error {
 }
 
 func TestInvalidCloseBQ(t *testing.T) {
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 
 	src := Source{}
 	cfg := map[string]string{}
-	cfg[googlebigquery.ConfigServiceAccount] = serviceAccount
-	cfg[googlebigquery.ConfigProjectID] = projectID
-	cfg[googlebigquery.ConfigDatasetID] = datasetID
-	cfg[googlebigquery.ConfigTableID] = tableID
-	cfg[googlebigquery.ConfigLocation] = location
-	cfg[googlebigquery.ConfigPrimaryKeyColName] = "post_abbr"
+	cfg[config.KeyServiceAccount] = serviceAccount
+	cfg[config.KeyProjectID] = projectID
+	cfg[config.KeyDatasetID] = datasetID
+	cfg[config.KeyTableID] = tableID
+	cfg[config.KeyLocation] = location
+	cfg[config.KeyPrimaryKeyColName] = "post_abbr"
 
 	ctx := context.Background()
 	err := src.Configure(ctx, cfg)

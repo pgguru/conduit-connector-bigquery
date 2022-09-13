@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio-labs/conduit-connector-bigquery/config"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"google.golang.org/api/option"
 	"gopkg.in/tomb.v2"
 )
@@ -30,7 +30,7 @@ import (
 type Source struct {
 	sdk.UnimplementedSource
 	bqReadClient bqClient
-	sourceConfig googlebigquery.SourceConfig
+	sourceConfig config.SourceConfig
 	// for all the function running in goroutine we needed the ctx value. To provide the current
 	// ctx value ctx was required in struct.
 	ctx            context.Context
@@ -44,26 +44,82 @@ type Source struct {
 }
 
 // position faces race condition. So will always use it inside lock. Write and Read happens on same time.
-// Ref issue- https://github.com/neha-Gupta1/conduit-connector-bigquery/issues/26
+// Ref issue- https://github.com/conduitio-labs/conduit-connector-bigquery/issues/26
 type position struct {
 	lock      *sync.Mutex
 	positions string
 }
 
 func NewSource() sdk.Source {
-	return &Source{}
+	return sdk.SourceWithMiddleware(&Source{}, sdk.DefaultSourceMiddleware()...)
+}
+
+// Parameters is a map of named Parameters that describe how to configure the Source.
+func (s *Source) Parameters() map[string]sdk.Parameter {
+	return map[string]sdk.Parameter{
+		config.KeyServiceAccount: {
+			Default:     "",
+			Required:    true,
+			Description: "service account key file with data pulling access. ref: https://cloud.google.com/docs/authentication/getting-started", // We can also take it as value if required
+		},
+		config.KeyProjectID: {
+			Default:     "",
+			Required:    true,
+			Description: "Google project ID.",
+		},
+		config.KeyDatasetID: {
+			Default:     "",
+			Required:    true,
+			Description: "Google Bigqueries dataset ID.",
+		},
+		config.KeyLocation: {
+			Default:     "",
+			Required:    true,
+			Description: "Google Bigqueries dataset location.",
+		},
+		config.KeyTableID: {
+			Default:     "",
+			Required:    true,
+			Description: "Google Bigqueries table ID.",
+		},
+		config.KeyPollingTime: {
+			Default:     "5",
+			Required:    false,
+			Description: "polling period for the CDC mode, formatted as a time.Duration string.",
+		},
+		config.KeyIncrementalColName: {
+			Default:  "",
+			Required: false,
+			Description: `Column name which provides visibility about newer rows. For eg, updated_at column which stores when the row was last updated\n
+			primary key with incremental value say id of type int or float.  \n eg value,
+			 updated_at`,
+		},
+		config.KeyPrimaryKeyColName: {
+			Default:  "",
+			Required: false,
+			Description: `Column name which provides visibility about uniqueness. For eg, _id which stores \n
+			primary key with incremental value say id of type int or float.  \n eg value,
+			 id`,
+		},
+	}
 }
 
 func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	sdk.Logger(ctx).Trace().Msg("Configuring a Source Connector.")
-	sourceConfig, err := googlebigquery.ParseSourceConfig(cfg)
+	sourceConfig, err := config.ParseSourceConfig(cfg)
 	if err != nil {
 		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("invalid config provided")
 		return err
 	}
 
 	s.sourceConfig = sourceConfig
-	s.clientType = &client{ctx: ctx, projectID: s.sourceConfig.Config.ProjectID, opts: []option.ClientOption{option.WithCredentialsJSON([]byte(s.sourceConfig.Config.ServiceAccount))}}
+	s.clientType = &client{
+		ctx:       ctx,
+		projectID: s.sourceConfig.Config.ProjectID,
+		opts: []option.ClientOption{
+			option.WithCredentialsJSON([]byte(s.sourceConfig.Config.ServiceAccount)),
+		},
+	}
 	return nil
 }
 
@@ -71,7 +127,7 @@ func (s *Source) Open(ctx context.Context, pos sdk.Position) (err error) {
 	s.ctx = ctx
 	fetchPos(s, pos)
 
-	pollingTime := googlebigquery.PollingTime
+	pollingTime := config.PollingTime
 
 	// s.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
