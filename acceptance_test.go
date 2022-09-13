@@ -115,7 +115,7 @@ func (d AcceptanceTestDriver) GenerateRecord(t *testing.T, op sdk.Operation) sdk
 func (d AcceptanceTestDriver) WriteToSource(t *testing.T, records []sdk.Record) []sdk.Record {
 	var err error
 	is := is.New(t)
-	config := d.SourceConfig(t)
+	config := d.ConfigurableAcceptanceTestDriver.SourceConfig(t)
 	records, err = writeToSource(t, config, records)
 	is.NoErr(err)
 
