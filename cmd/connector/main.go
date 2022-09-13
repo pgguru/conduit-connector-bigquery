@@ -15,9 +15,9 @@
 package main
 
 import (
+	connector "github.com/conduitio-labs/conduit-connector-bigquery"
+	"github.com/conduitio-labs/conduit-connector-bigquery/googlesource"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	connector "github.com/neha-Gupta1/conduit-connector-bigquery"
-	"github.com/neha-Gupta1/conduit-connector-bigquery/googlesource"
 )
 
 func main() {

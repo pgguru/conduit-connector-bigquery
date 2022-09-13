@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	googlebigquery "github.com/conduitio-labs/conduit-connector-bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/matryer/is"
-	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"go.uber.org/goleak"
 	"google.golang.org/api/option"
 )

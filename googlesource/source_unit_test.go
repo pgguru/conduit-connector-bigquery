@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	googlebigquery "github.com/conduitio-labs/conduit-connector-bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	googlebigquery "github.com/neha-Gupta1/conduit-connector-bigquery"
 	"gopkg.in/tomb.v2"
 )
 
