@@ -501,10 +501,6 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
 	}
 
-	if serviceAccount == "" || projectID == "" {
-		t.Skip()
-	}
-
 	err := dataSetup(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
