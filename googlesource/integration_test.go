@@ -40,6 +40,10 @@ var (
 
 // Initial setup required - project with service account.
 func dataSetup(t *testing.T) (err error) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	ctx := context.Background()
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
@@ -98,6 +102,10 @@ type Item struct {
 
 // Initial setup required - project with service account.
 func dataSetupWithTimestamp(t *testing.T) (err error) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	ctx := context.Background()
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
@@ -165,6 +173,10 @@ func dataSetupWithTimestamp(t *testing.T) (err error) {
 }
 
 func dataUpdationWithTimestamp(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	ctx := context.Background()
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
@@ -198,6 +210,10 @@ func dataUpdationWithTimestamp(t *testing.T) {
 }
 
 func cleanupDataset(t *testing.T, tables []string) (err error) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	ctx := context.Background()
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
@@ -227,6 +243,10 @@ func cleanupDataset(t *testing.T, tables []string) (err error) {
 }
 
 func TestSuccessTimeIncremental(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetupWithTimestamp(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
@@ -281,6 +301,10 @@ func TestSuccessTimeIncremental(t *testing.T) {
 }
 
 func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetupWithTimestamp(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
@@ -354,6 +378,10 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 }
 
 func TestSuccessPrimaryKey(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetupWithTimestamp(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
@@ -408,6 +436,10 @@ func TestSuccessPrimaryKey(t *testing.T) {
 }
 
 func TestSuccessfulGetFromPosition(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetup(t)
 	if err != nil {
 		t.Log("Could not create values. Err: ", err)
@@ -465,6 +497,14 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 }
 
 func TestSuccessfulGetWholeDataset(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
+	if serviceAccount == "" || projectID == "" {
+		t.Skip()
+	}
+
 	err := dataSetup(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
@@ -520,6 +560,10 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 }
 
 func TestSuccessfulOrderByName(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetup(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)

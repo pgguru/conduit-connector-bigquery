@@ -41,6 +41,10 @@ func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
 }
 
 func TestSuccessfulTearDown(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetup(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
@@ -83,6 +87,10 @@ func TestSuccessfulTearDown(t *testing.T) {
 }
 
 func TestMultipleTables(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetup(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
@@ -196,6 +204,10 @@ func (client *mockClient) Client() (*bigquery.Client, error) {
 }
 
 func TestInvalid(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	config.PollingTime = time.Second * 1
 
 	src := Source{}
@@ -236,6 +248,10 @@ func TestInvalid(t *testing.T) {
 }
 
 func TestInvalidOrderByName(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	err := dataSetup(t)
 	if err != nil {
 		t.Errorf("Could not create values. Err: %v", err)
@@ -278,6 +294,10 @@ func (bq mockBQClientStruct) Close() error {
 }
 
 func TestInvalidCloseBQ(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	config.PollingTime = time.Second * 1
 
 	src := Source{}
