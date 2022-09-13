@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package googlebigquery
+package config
 
 import (
 	"testing"
@@ -28,12 +28,12 @@ func TestParseNoConfig(t *testing.T) {
 
 func TestParseSourceConfigAllConfigPresent(t *testing.T) {
 	cfg := map[string]string{}
-	cfg[ConfigServiceAccount] = "test"
-	cfg[ConfigProjectID] = "test"
-	cfg[ConfigDatasetID] = "test"
-	cfg[ConfigLocation] = "test"
-	cfg[ConfigTableID] = "testTable"
-	cfg[ConfigPrimaryKeyColName] = "primaryKey"
+	cfg[KeyServiceAccount] = "test"
+	cfg[KeyProjectID] = "test"
+	cfg[KeyDatasetID] = "test"
+	cfg[KeyLocation] = "test"
+	cfg[KeyTableID] = "testTable"
+	cfg[KeyPrimaryKeyColName] = "primaryKey"
 
 	_, err := ParseSourceConfig(cfg)
 	if err != nil {
@@ -43,43 +43,39 @@ func TestParseSourceConfigAllConfigPresent(t *testing.T) {
 
 func TestParseSourceConfigPartialConfig(t *testing.T) {
 	cfg := map[string]string{}
-	delete(cfg, ConfigServiceAccount)
-	cfg[ConfigProjectID] = "test"
-	cfg[ConfigDatasetID] = "test"
-	cfg[ConfigLocation] = "test"
+	delete(cfg, KeyServiceAccount)
+	cfg[KeyProjectID] = "test"
+	cfg[KeyDatasetID] = "test"
+	cfg[KeyLocation] = "test"
 
 	_, err := ParseSourceConfig(cfg)
 	if err == nil {
 		t.Errorf("parse source config, got error %v", err)
 	}
 
-	cfg[ConfigServiceAccount] = "test"
-	delete(cfg, ConfigProjectID)
-	cfg[ConfigDatasetID] = "test"
+	cfg[KeyServiceAccount] = "test"
+	delete(cfg, KeyProjectID)
+	cfg[KeyDatasetID] = "test"
 
 	_, err = ParseSourceConfig(cfg)
 	if err == nil {
 		t.Errorf("parse source config, got error %v", err)
 	}
 
-	cfg[ConfigServiceAccount] = "test"
-	cfg[ConfigProjectID] = "test"
-	delete(cfg, ConfigDatasetID)
+	cfg[KeyServiceAccount] = "test"
+	cfg[KeyProjectID] = "test"
+	delete(cfg, KeyDatasetID)
 
 	_, err = ParseSourceConfig(cfg)
 	if err == nil {
 		t.Errorf("parse source config, got error %v", err)
 	}
 
-	cfg[ConfigDatasetID] = "test"
-	delete(cfg, ConfigLocation)
+	cfg[KeyDatasetID] = "test"
+	delete(cfg, KeyLocation)
 
 	_, err = ParseSourceConfig(cfg)
 	if err == nil {
 		t.Errorf("parse source config, got error %v", err)
 	}
-}
-
-func TestSpecification(t *testing.T) {
-	Specification()
 }

@@ -15,16 +15,13 @@
 package googlebigquery
 
 import (
+	"github.com/conduitio-labs/conduit-connector-bigquery/googlesource"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
-// Specification returns the connector's specification.
-func Specification() sdk.Specification {
-	return sdk.Specification{
-		Name:        "bigquery",
-		Summary:     "A BigQuery source plugin for Conduit, written in Go.",
-		Description: "A plugin to fetch data from google BigQuery",
-		Version:     "v0.1.0",
-		Author:      "Neha Gupta",
-	}
+// Connector represents a sdk.Connector for Google BigQuery.
+var Connector = sdk.Connector{
+	NewSpecification: Specification,
+	NewSource:        googlesource.NewSource,
+	NewDestination:   nil,
 }

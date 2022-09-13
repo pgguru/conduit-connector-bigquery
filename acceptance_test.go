@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package googlesource
+package googlebigquery
 
 import (
 	"bytes"
@@ -20,30 +20,38 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	googlebigquery "github.com/conduitio-labs/conduit-connector-bigquery"
+	"github.com/conduitio-labs/conduit-connector-bigquery/config"
+	"github.com/conduitio-labs/conduit-connector-bigquery/googlesource"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/matryer/is"
 	"go.uber.org/goleak"
 	"google.golang.org/api/option"
 )
 
-var globalCounter = 0
+var (
+	globalCounter  = 0
+	serviceAccount = os.Getenv("GOOGLE_SERVICE_ACCOUNT") // eg, export GOOGLE_SERVICE_ACCOUNT = "path to service account file"
+	projectID      = os.Getenv("GOOGLE_PROJECT_ID")      // eg, export GOOGLE_PROJECT_ID ="conduit-connectors"
+	datasetID      = "conduit_test_dataset"
+	location       = "US"
+)
 
 func TestAcceptance(t *testing.T) {
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:     serviceAccount,
-		googlebigquery.ConfigProjectID:          projectID,
-		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigTableID:            "table_acceptance",
-		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigPrimaryKeyColName:  "created_at",
-		googlebigquery.ConfigIncrementalColName: "created_at",
-		googlebigquery.ConfigPollingTime:        "1ms",
+		config.KeyServiceAccount:     serviceAccount,
+		config.KeyProjectID:          projectID,
+		config.KeyDatasetID:          datasetID,
+		config.KeyTableID:            "table_acceptance",
+		config.KeyLocation:           location,
+		config.KeyPrimaryKeyColName:  "created_at",
+		config.KeyIncrementalColName: "created_at",
+		config.KeyPollingTime:        "1ms",
 	}
 
 	// create a dataset once and clean up later
@@ -63,8 +71,8 @@ func TestAcceptance(t *testing.T) {
 		sdk.ConfigurableAcceptanceTestDriver{
 			Config: sdk.ConfigurableAcceptanceTestDriverConfig{
 				Connector: sdk.Connector{
-					NewSpecification: googlebigquery.Specification,
-					NewSource:        NewSource,
+					NewSpecification: Specification,
+					NewSource:        googlesource.NewSource,
 				},
 				SourceConfig: cfg,
 				GoleakOptions: []goleak.Option{
@@ -73,13 +81,13 @@ func TestAcceptance(t *testing.T) {
 					goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
 				},
 				BeforeTest: func(t *testing.T) {
-					err := createTableForAcceptance(t, client, cfg[googlebigquery.ConfigTableID])
+					err := createTableForAcceptance(t, client, cfg[config.KeyTableID])
 					if err != nil {
 						t.Log("Error found")
 					}
 				},
 				AfterTest: func(t *testing.T) {
-					err := cleantUpTableForAcceptance(t, client, []string{cfg[googlebigquery.ConfigTableID]})
+					err := cleantUpTableForAcceptance(t, client, []string{cfg[config.KeyTableID]})
 					if err != nil {
 						t.Log("Error found")
 					}
@@ -93,6 +101,14 @@ func TestAcceptance(t *testing.T) {
 // AcceptanceTestDriver implements sdk.AcceptanceTestDriver
 type AcceptanceTestDriver struct {
 	sdk.ConfigurableAcceptanceTestDriver
+}
+
+func (d AcceptanceTestDriver) GenerateRecord(t *testing.T, op sdk.Operation) sdk.Record {
+	record := d.ConfigurableAcceptanceTestDriver.GenerateRecord(t, op)
+
+	record.Metadata = nil
+
+	return record
 }
 
 // WriteToSource writes data for source to pull data from
@@ -152,9 +168,9 @@ func createTableForAcceptance(t *testing.T, client *bigquery.Client, tableID str
 }
 
 // dataSetupWithRecord Initial setup required - project with service account.
-func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
+func dataSetupWithRecord(t *testing.T, cfg map[string]string, record []sdk.Record) (result []sdk.Record, err error) {
 	ctx := context.Background()
-	tableID := config[googlebigquery.ConfigTableID]
+	tableID := cfg[config.KeyTableID]
 
 	client, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsJSON([]byte(serviceAccount)))
 	if err != nil {
@@ -191,7 +207,13 @@ func dataSetupWithRecord(t *testing.T, config map[string]string, record []sdk.Re
 			return result, err
 		}
 
-		result = append(result, sdk.Record{Payload: data, Key: sdk.RawData(byteKey), Position: positionRecord})
+		newRecord := sdk.Util.Source.NewRecordCreate(
+			positionRecord, nil, sdk.RawData(byteKey), data,
+		)
+		newRecord.Metadata = nil
+
+		result = append(result, newRecord)
+
 		q := client.Query(query)
 		q.Location = location
 

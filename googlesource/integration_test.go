@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	googlebigquery "github.com/conduitio-labs/conduit-connector-bigquery"
+	"github.com/conduitio-labs/conduit-connector-bigquery/config"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"google.golang.org/api/option"
 )
@@ -241,15 +241,15 @@ func TestSuccessTimeIncremental(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:     serviceAccount,
-		googlebigquery.ConfigProjectID:          projectID,
-		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigTableID:            tableIDTimeStamp,
-		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "updatedat",
-		googlebigquery.ConfigPrimaryKeyColName:  "age",
+		config.KeyServiceAccount:     serviceAccount,
+		config.KeyProjectID:          projectID,
+		config.KeyDatasetID:          datasetID,
+		config.KeyTableID:            tableIDTimeStamp,
+		config.KeyLocation:           location,
+		config.KeyIncrementalColName: "updatedat",
+		config.KeyPrimaryKeyColName:  "age",
 	}
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -295,15 +295,15 @@ func TestSuccessTimeIncrementalAndUpdate(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:     serviceAccount,
-		googlebigquery.ConfigProjectID:          projectID,
-		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigTableID:            tableIDTimeStamp,
-		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "updatedat",
-		googlebigquery.ConfigPrimaryKeyColName:  "age",
+		config.KeyServiceAccount:     serviceAccount,
+		config.KeyProjectID:          projectID,
+		config.KeyDatasetID:          datasetID,
+		config.KeyTableID:            tableIDTimeStamp,
+		config.KeyLocation:           location,
+		config.KeyIncrementalColName: "updatedat",
+		config.KeyPrimaryKeyColName:  "age",
 	}
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -368,15 +368,15 @@ func TestSuccessPrimaryKey(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:     serviceAccount,
-		googlebigquery.ConfigProjectID:          projectID,
-		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigTableID:            tableIDTimeStamp,
-		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "age",
-		googlebigquery.ConfigPrimaryKeyColName:  "updatedat",
+		config.KeyServiceAccount:     serviceAccount,
+		config.KeyProjectID:          projectID,
+		config.KeyDatasetID:          datasetID,
+		config.KeyTableID:            tableIDTimeStamp,
+		config.KeyLocation:           location,
+		config.KeyIncrementalColName: "age",
+		config.KeyPrimaryKeyColName:  "updatedat",
 	}
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -422,14 +422,14 @@ func TestSuccessfulGetFromPosition(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:    serviceAccount,
-		googlebigquery.ConfigProjectID:         projectID,
-		googlebigquery.ConfigDatasetID:         datasetID,
-		googlebigquery.ConfigTableID:           tableID,
-		googlebigquery.ConfigLocation:          location,
-		googlebigquery.ConfigPrimaryKeyColName: "post_abbr",
+		config.KeyServiceAccount:    serviceAccount,
+		config.KeyProjectID:         projectID,
+		config.KeyDatasetID:         datasetID,
+		config.KeyTableID:           tableID,
+		config.KeyLocation:          location,
+		config.KeyPrimaryKeyColName: "post_abbr",
 	}
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -479,13 +479,13 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:     serviceAccount,
-		googlebigquery.ConfigProjectID:          projectID,
-		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigTableID:            tableID, // tableID,
-		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigIncrementalColName: "post_abbr",
-		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr"}
+		config.KeyServiceAccount:     serviceAccount,
+		config.KeyProjectID:          projectID,
+		config.KeyDatasetID:          datasetID,
+		config.KeyTableID:            tableID, // tableID,
+		config.KeyLocation:           location,
+		config.KeyIncrementalColName: "post_abbr",
+		config.KeyPrimaryKeyColName:  "post_abbr"}
 
 	ctx := context.Background()
 	err = src.Configure(ctx, cfg)
@@ -494,7 +494,7 @@ func TestSuccessfulGetWholeDataset(t *testing.T) {
 		t.Errorf("some other error found: %v", err)
 	}
 
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err != nil {
@@ -534,13 +534,13 @@ func TestSuccessfulOrderByName(t *testing.T) {
 
 	src := Source{}
 	cfg := map[string]string{
-		googlebigquery.ConfigServiceAccount:     serviceAccount,
-		googlebigquery.ConfigProjectID:          projectID,
-		googlebigquery.ConfigDatasetID:          datasetID,
-		googlebigquery.ConfigLocation:           location,
-		googlebigquery.ConfigTableID:            tableID,
-		googlebigquery.ConfigIncrementalColName: "post_abbr",
-		googlebigquery.ConfigPrimaryKeyColName:  "post_abbr",
+		config.KeyServiceAccount:     serviceAccount,
+		config.KeyProjectID:          projectID,
+		config.KeyDatasetID:          datasetID,
+		config.KeyLocation:           location,
+		config.KeyTableID:            tableID,
+		config.KeyIncrementalColName: "post_abbr",
+		config.KeyPrimaryKeyColName:  "post_abbr",
 	}
 
 	ctx := context.Background()
@@ -550,7 +550,7 @@ func TestSuccessfulOrderByName(t *testing.T) {
 		t.Errorf("some other error found: %v", err)
 	}
 
-	googlebigquery.PollingTime = time.Second * 1
+	config.PollingTime = time.Second * 1
 	pos := sdk.Position{}
 	err = src.Open(ctx, pos)
 	if err != nil {

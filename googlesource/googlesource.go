@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	googlebigquery "github.com/conduitio-labs/conduit-connector-bigquery"
+	"github.com/conduitio-labs/conduit-connector-bigquery/config"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -152,7 +152,7 @@ func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 
 			if err == iterator.Done {
 				sdk.Logger(ctx).Trace().Str("counter", fmt.Sprintf("%d", counter)).Msg("iterator is done.")
-				if counter < googlebigquery.CounterLimit {
+				if counter < config.CounterLimit {
 					// if counter is smaller than the limit we have reached the end of
 					// iterator. And will break the for loop now.
 					lastRow = true
@@ -218,11 +218,10 @@ func (s *Source) ReadGoogleRow(ctx context.Context) (err error) {
 				continue
 			}
 
-			record := sdk.Record{
-				CreatedAt: time.Now().UTC(),
-				Payload:   data,
-				Key:       sdk.RawData(byteKey),
-				Position:  recPosition}
+			metadata := make(sdk.Metadata)
+			metadata.SetCreatedAt(time.Now().UTC())
+
+			record := sdk.Util.Source.NewRecordCreate(recPosition, metadata, sdk.RawData(byteKey), data)
 
 			// select statement to make sure channel was not closed by teardown stage
 			if s.iteratorClosed {
@@ -310,10 +309,10 @@ func (s *Source) getRowIterator(ctx context.Context, offset string, tableID stri
 		columnName := s.sourceConfig.Config.IncrementColName
 		if firstSync {
 			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
-				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
+				" ORDER BY " + columnName + " LIMIT " + strconv.Itoa(config.CounterLimit)
 		} else {
 			query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` WHERE " + columnName +
-				" > " + offset + " ORDER BY " + columnName + " LIMIT " + strconv.Itoa(googlebigquery.CounterLimit)
+				" > " + offset + " ORDER BY " + columnName + " LIMIT " + strconv.Itoa(config.CounterLimit)
 		}
 	} else {
 		// add default value if none specified
@@ -322,7 +321,7 @@ func (s *Source) getRowIterator(ctx context.Context, offset string, tableID stri
 		}
 		// if no incremental value provided using default offset which is created by incrementing a counter each time a row is sync.
 		query = "SELECT * FROM `" + s.sourceConfig.Config.ProjectID + "." + s.sourceConfig.Config.DatasetID + "." + tableID + "` " +
-			" LIMIT " + strconv.Itoa(googlebigquery.CounterLimit) + " OFFSET " + offset
+			" LIMIT " + strconv.Itoa(config.CounterLimit) + " OFFSET " + offset
 	}
 
 	return s.bqReadClient.Query(s, query)

@@ -15,12 +15,10 @@
 package main
 
 import (
-	connector "github.com/conduitio-labs/conduit-connector-bigquery"
-	"github.com/conduitio-labs/conduit-connector-bigquery/googlesource"
+	googlebigquery "github.com/conduitio-labs/conduit-connector-bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 func main() {
-	connector := sdk.Connector{NewSpecification: connector.Specification, NewSource: googlesource.NewSource}
-	sdk.Serve(connector)
+	sdk.Serve(googlebigquery.Connector)
 }
