@@ -43,6 +43,10 @@ var (
 )
 
 func TestAcceptance(t *testing.T) {
+	if serviceAccount == "" || projectID == "" {
+		t.Skip("GOOGLE_SERVICE_ACCOUNT or GOOGLE_PROJECT_ID is missing")
+	}
+
 	cfg := map[string]string{
 		config.KeyServiceAccount:     serviceAccount,
 		config.KeyProjectID:          projectID,
