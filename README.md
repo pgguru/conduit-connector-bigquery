@@ -61,6 +61,7 @@ Run `make test` to run all the unit tests. To run the test cases export environm
 
 ### Known Issues & Limitations
 * Current implementation handles snapshot and incremental data.
+* The connector is able to send record's `Key` as `sdk.RawData` only.
 
 ### Planned work
 - [ ] Handle Delete data
