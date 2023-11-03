@@ -23,5 +23,5 @@ import (
 var Connector = sdk.Connector{
 	NewSpecification: Specification,
 	NewSource:        googlesource.NewSource,
-	NewDestination:   nil,
+	NewDestination:   googlesource.NewDestination,
 }
