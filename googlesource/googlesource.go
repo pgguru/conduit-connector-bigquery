@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/conduitio-labs/conduit-connector-bigquery/config"
+	"github.com/pgguru/conduit-connector-bigquery/config"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"

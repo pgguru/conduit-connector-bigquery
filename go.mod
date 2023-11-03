@@ -1,4 +1,4 @@
-module github.com/conduitio-labs/conduit-connector-bigquery
+module github.com/pgguru/conduit-connector-bigquery
 
 go 1.18
 

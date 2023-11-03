@@ -7,7 +7,7 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - "-s -w -X 'github.com/conduitio-labs/conduit-connector-bigquery.version={{ .Tag }}'"
+      - "-s -w -X 'github.com/pgguru/conduit-connector-bigquery.version={{ .Tag }}'"
 checksum:
   name_template: checksums.txt
 archives:

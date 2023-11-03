@@ -15,7 +15,7 @@
 package main
 
 import (
-	googlebigquery "github.com/conduitio-labs/conduit-connector-bigquery"
+	googlebigquery "github.com/pgguru/conduit-connector-bigquery"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 

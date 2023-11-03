@@ -15,7 +15,7 @@
 package googlebigquery
 
 import (
-	"github.com/conduitio-labs/conduit-connector-bigquery/googlesource"
+	"github.com/pgguru/conduit-connector-bigquery/googlesource"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 

@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/conduitio-labs/conduit-connector-bigquery/config"
+	"github.com/pgguru/conduit-connector-bigquery/config"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"google.golang.org/api/option"
 	"gopkg.in/tomb.v2"
@@ -44,7 +44,7 @@ type Destination struct {
 }
 
 // position faces race condition. So will always use it inside lock. Write and Read happens on same time.
-// Ref issue- https://github.com/conduitio-labs/conduit-connector-bigquery/issues/26
+// Ref issue- https://github.com/pgguru/conduit-connector-bigquery/issues/26
 type position struct {
 	lock      *sync.Mutex
 	positions string

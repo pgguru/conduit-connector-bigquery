@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/conduitio-labs/conduit-connector-bigquery/config"
-	"github.com/conduitio-labs/conduit-connector-bigquery/googlesource"
+	"github.com/pgguru/conduit-connector-bigquery/config"
+	"github.com/pgguru/conduit-connector-bigquery/googlesource"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/matryer/is"
 	"go.uber.org/goleak"
