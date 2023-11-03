@@ -30,6 +30,6 @@ func Specification() sdk.Specification {
 		Summary:     "A BigQuery source plugin for Conduit, written in Go.",
 		Description: "A plugin to fetch data from google BigQuery",
 		Version:     version,
-		Author:      "Neha Gupta",
+		Author:      ["Neha Gupta", "David Christensen"]
 	}
 }
