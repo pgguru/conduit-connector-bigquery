@@ -71,6 +71,11 @@ type SourceConfig struct {
 	Config Config
 }
 
+// DestinationConfig is config for destination
+type DestinationConfig struct {
+	Config Config
+}
+
 func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 	err := checkEmpty(cfg)
 	if err != nil {
@@ -113,6 +118,52 @@ func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
 		PrimaryKeyColName: cfg[KeyPrimaryKeyColName]}
 
 	return SourceConfig{
+		Config: config,
+	}, nil
+}
+
+func ParseDestinationConfig(cfg map[string]string) (DestinationConfig, error) {
+	err := checkEmpty(cfg)
+	if err != nil {
+		log.Println("Empty config found:", err)
+		return DestinationConfig{}, err
+	}
+
+	if _, ok := cfg[KeyServiceAccount]; !ok {
+		return DestinationConfig{}, errors.New("service account can't be blank")
+	}
+
+	if _, ok := cfg[KeyProjectID]; !ok {
+		return DestinationConfig{}, errors.New("project ID can't be blank")
+	}
+
+	if _, ok := cfg[KeyDatasetID]; !ok {
+		return DestinationConfig{}, errors.New("dataset ID can't be blank")
+	}
+
+	if _, ok := cfg[KeyLocation]; !ok {
+		return DestinationConfig{}, errors.New("location can't be blank")
+	}
+
+	if _, ok := cfg[KeyTableID]; !ok {
+		return DestinationConfig{}, errors.New("tableID can't be blank")
+	}
+
+	if _, ok := cfg[KeyPrimaryKeyColName]; !ok {
+		return DestinationConfig{}, errors.New("primary key can't be blank")
+	}
+
+	config := Config{
+		ServiceAccount:    cfg[KeyServiceAccount],
+		ProjectID:         cfg[KeyProjectID],
+		DatasetID:         cfg[KeyDatasetID],
+		TableID:           cfg[KeyTableID],
+		Location:          cfg[KeyLocation],
+		PollingTime:       cfg[KeyPollingTime],
+		IncrementColName:  cfg[KeyIncrementalColName],
+		PrimaryKeyColName: cfg[KeyPrimaryKeyColName]}
+
+	return DestinationConfig{
 		Config: config,
 	}, nil
 }
