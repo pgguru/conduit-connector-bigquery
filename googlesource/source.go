@@ -83,7 +83,7 @@ func (s *Source) Parameters() map[string]sdk.Parameter {
 			Description: "Google Bigqueries table ID.",
 		},
 		config.KeyPollingTime: {
-			Default:     "5",
+			Default:     "5ms",
 			Required:    false,
 			Description: "polling period for the CDC mode, formatted as a time.Duration string.",
 		},

@@ -27,9 +27,9 @@ var version = "v0.0.0-dev"
 func Specification() sdk.Specification {
 	return sdk.Specification{
 		Name:        "bigquery",
-		Summary:     "A BigQuery source plugin for Conduit, written in Go.",
-		Description: "A plugin to fetch data from google BigQuery",
+		Summary:     "A BigQuery plugin for Conduit, written in Go.",
+		Description: "A plugin to store and fetch data from google BigQuery",
 		Version:     version,
-		Author:      ["Neha Gupta", "David Christensen"]
+		Author:      "David Christensen",
 	}
 }

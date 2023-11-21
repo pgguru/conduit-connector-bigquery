@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/pgguru/conduit-connector-bigquery/config"
@@ -43,19 +42,12 @@ type Destination struct {
 	clientType clientFactory
 }
 
-// position faces race condition. So will always use it inside lock. Write and Read happens on same time.
-// Ref issue- https://github.com/pgguru/conduit-connector-bigquery/issues/26
-type position struct {
-	lock      *sync.Mutex
-	positions string
-}
-
 func NewDestination() sdk.Destination {
 	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware()...)
 }
 
 // Parameters is a map of named Parameters that describe how to configure the Destination.
-func (s *Destination) Parameters() map[string]sdk.Parameter {
+func (d *Destination) Parameters() map[string]sdk.Parameter {
 	return map[string]sdk.Parameter{
 		config.KeyServiceAccount: {
 			Default:     "",
@@ -83,7 +75,7 @@ func (s *Destination) Parameters() map[string]sdk.Parameter {
 			Description: "Google Bigqueries table ID.",
 		},
 		config.KeyPollingTime: {
-			Default:     "5",
+			Default:     "5ms",
 			Required:    false,
 			Description: "polling period for the CDC mode, formatted as a time.Duration string.",
 		},
@@ -104,7 +96,7 @@ func (s *Destination) Parameters() map[string]sdk.Parameter {
 	}
 }
 
-func (s *Destination) Configure(ctx context.Context, cfg map[string]string) error {
+func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
 	sdk.Logger(ctx).Trace().Msg("Configuring a Destination Connector.")
 	destinationConfig, err := config.ParseDestinationConfig(cfg)
 	if err != nil {
@@ -112,61 +104,61 @@ func (s *Destination) Configure(ctx context.Context, cfg map[string]string) erro
 		return err
 	}
 
-	s.destinationConfig = destinationConfig
-	s.clientType = &client{
+	d.destinationConfig = destinationConfig
+	d.clientType = &client{
 		ctx:       ctx,
-		projectID: s.destinationConfig.Config.ProjectID,
+		projectID: d.destinationConfig.Config.ProjectID,
 		opts: []option.ClientOption{
-			option.WithCredentialsJSON([]byte(s.destinationConfig.Config.ServiceAccount)),
+			option.WithCredentialsJSON([]byte(d.destinationConfig.Config.ServiceAccount)),
 		},
 	}
 	return nil
 }
 
-func (s *Destination) Open(ctx context.Context, pos sdk.Position) (err error) {
-	s.ctx = ctx
-	fetchPos(s, pos)
+func (d *Destination) Open(ctx context.Context) (err error) {
+	d.ctx = ctx
 
 	pollingTime := config.PollingTime
 
-	// s.records is a buffered channel that contains records
+	// d.records is a buffered channel that contains records
 	//  coming from all the tables which user wants to sync.
-	s.records = make(chan sdk.Record, 100)
-	s.iteratorClosed = false
+	d.records = make(chan sdk.Record, 100)
+	d.iteratorClosed = false
 
-	if len(s.destinationConfig.Config.PollingTime) > 0 {
-		pollingTime, err = time.ParseDuration(s.destinationConfig.Config.PollingTime)
+	if len(d.destinationConfig.Config.PollingTime) > 0 {
+		pollingTime, err = time.ParseDuration(d.destinationConfig.Config.PollingTime)
 		if err != nil {
 			sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while getting time.")
 			return errors.New("invalid polling time duration provided")
 		}
 	}
 
-	s.ticker = time.NewTicker(pollingTime)
-	s.tomb = &tomb.Tomb{}
-	client, err := s.clientType.Client()
+	d.ticker = time.NewTicker(pollingTime)
+	d.tomb = &tomb.Tomb{}
+	client, err := d.clientType.Client()
 	if err != nil {
 		sdk.Logger(ctx).Error().Str("err", err.Error()).Msg("error found while creating connection. ")
 		clientErr := fmt.Errorf("error while creating bigquery client: %s", err.Error())
 		return clientErr
 	}
 	bqClient := bqClientStruct{client: client}
-	s.bqWriteClient = bqClient
+	d.bqWriteClient = bqClient
 
-	s.tomb.Go(s.runIterator)
 	sdk.Logger(ctx).Trace().Msg("end of function: open")
 	return nil
 }
 
-func (s *Destination) Write(ctx context.Context, r sdk.Record) error {
+func (d *Destination) Write(ctx context.Context, r []sdk.Record) (int, error) {
 	sdk.Logger(ctx).Trace().Msg("Started write function")
 
-	return d.Util.Route(ctx, r,
-    d.handleInsert,
-    d.handleUpdate,
-    d.handleDelete,
-    d.handleSnapshot, // we could also reuse d.handleInsert
-  )
+	return len(r), nil
+	
+  // 	return sdk.Util.Route(ctx, r,
+  //   d.handleInsert,
+  //   d.handleUpdate,
+  //   d.handleDelete,
+  //   d.handleSnapshot, // we could also reuse d.handleInsert
+  // )
 }
 
 func (d *Destination) handleInsert(ctx context.Context, r sdk.Record) error {
@@ -189,34 +181,34 @@ func (d *Destination) handleSnapshot(ctx context.Context, r sdk.Record) error {
 	return nil
 }
 
-func (s *Destination) Teardown(ctx context.Context) error {
-	s.iteratorClosed = true
+func (d *Destination) Teardown(ctx context.Context) error {
+	d.iteratorClosed = true
 
-	if s.records != nil {
-		close(s.records)
+	if d.records != nil {
+		close(d.records)
 	}
-	err := s.StopIterator()
+	err := d.StopIterator()
 	if err != nil {
-		sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
+		sdk.Logger(d.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
 		return err
 	}
 	return nil
 }
 
-func (s *Destination) StopIterator() error {
-	s.iteratorClosed = true
-	if s.bqWriteClient != nil {
-		err := s.bqWriteClient.Close()
+func (d *Destination) StopIterator() error {
+	d.iteratorClosed = true
+	if d.bqWriteClient != nil {
+		err := d.bqWriteClient.Close()
 		if err != nil {
-			sdk.Logger(s.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
+			sdk.Logger(d.ctx).Error().Str("err", err.Error()).Msg("got error while closing BigQuery client")
 			return err
 		}
 	}
-	if s.ticker != nil {
-		s.ticker.Stop()
+	if d.ticker != nil {
+		d.ticker.Stop()
 	}
-	if s.tomb != nil {
-		s.tomb.Kill(errors.New("iterator is stopped"))
+	if d.tomb != nil {
+		d.tomb.Kill(errors.New("iterator is stopped"))
 	}
 	return nil
 }
